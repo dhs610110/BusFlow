@@ -85,3 +85,37 @@ STATIONS_5001B = [
         "sgg_cd": "11680"
     },
 ]
+
+#여기서부터는 날씨
+
+KMA_API_KEY = os.getenv(
+    "KMA_API_KEY"
+)
+
+
+WEATHER_STATIONS_BY_SGG = {
+
+    # 용인시 처인구
+    "41461": {
+        "station_id": "119",
+        "station_name": "수원",
+    },
+
+    # 용인시 기흥구
+    "41463": {
+        "station_id": "119",
+        "station_name": "수원",
+    },
+
+    # 서울 서초구
+    "11650": {
+        "station_id": "108",
+        "station_name": "서울",
+    },
+
+    # 서울 강남구
+    "11680": {
+        "station_id": "108",
+        "station_name": "서울",
+    },
+}
