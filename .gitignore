@@ -1,0 +1,20 @@
+# API Key / 환경변수
+.env
+
+# 가상환경
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# SQLite DB
+data/*.db
+
+# 생성된 Excel 파일
+data/*.xlsx
