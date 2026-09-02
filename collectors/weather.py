@@ -12,7 +12,7 @@ from config import (
     WEATHER_STATIONS_BY_SGG,
 )
 
-from database.db import save_weather
+from database.db_weather import save_weather
 
 
 URL = (
@@ -21,7 +21,7 @@ URL = (
     "getWthrDataList"
 )
 
-DB_PATH = "data/busflow.db"
+DB_PATH = "data/weather.db"
 
 START_HOUR = 6
 END_HOUR = 22
@@ -248,7 +248,7 @@ def get_weather(
 
         try:
             hour = int(
-                tm.split(" ")[1]
+                tm.split(" ")[1].split(":")[0]
             )
 
         except (
@@ -278,7 +278,7 @@ def normalize_weather(
     tm = weather["tm"]
 
     hour = int(
-        tm.split(" ")[1]
+        tm.split(" ")[1].split(":")[0]
     )
 
     return {
