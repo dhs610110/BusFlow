@@ -11,6 +11,11 @@ from database.db import save_congestion
 URL = "https://apis.data.go.kr/1613000/RouteCongestionLevel/getRouteCongestionLevel"
 DB_PATH = "data/busflow.db"
 
+MAX_RETRIES = 5
+RETRY_WAIT_SECONDS = 60
+REQUEST_TIMEOUT = (10, 40)
+REQUEST_INTERVAL = 1
+
 
 # =========================================================
 # 이미 DB에 저장되어 있는지 확인
@@ -65,68 +70,146 @@ def get_congestion(
         "dataType": "JSON",
     }
 
-    try:
-        response = requests.get(
-            URL,
-            params=params,
-            timeout=15
-        )
-
-    except requests.RequestException as error:
-        print()
-        print("네트워크 오류:", error)
-        print("수집을 중단합니다.")
-        return "STOP"
-
-
     # -----------------------------------------------------
-    # API 호출 제한
+    # 최대 5번까지 API 요청
     # -----------------------------------------------------
 
-    if response.status_code == 429:
-        print()
-        print("================================")
-        print("API 호출 한도 초과 (429)")
-        print("수집을 중단합니다.")
-        print("나중에 다시 실행하면 이어서 수집됩니다.")
-        print("================================")
-        print()
+    for attempt in range(1, MAX_RETRIES + 1):
 
-        return "STOP"
+        try:
+            response = requests.get(
+                URL,
+                params=params,
+                timeout=REQUEST_TIMEOUT
+            )
+
+        # -------------------------------------------------
+        # Timeout
+        # -------------------------------------------------
+
+        except requests.exceptions.Timeout:
+
+            print()
+            print(
+                f"응답 시간 초과 "
+                f"({attempt}/{MAX_RETRIES})"
+            )
+
+            if attempt < MAX_RETRIES:
+                print("1분 후 다시 시도합니다.")
+                time.sleep(RETRY_WAIT_SECONDS)
+                continue
+
+            print("→ 해당 날짜 SKIP")
+            return "SKIP"
 
 
-    # -----------------------------------------------------
-    # 기타 HTTP 오류
-    # -----------------------------------------------------
+        # -------------------------------------------------
+        # 기타 네트워크 오류
+        # -------------------------------------------------
 
-    if response.status_code != 200:
-        print()
-        print(
-            "API 요청 실패:",
-            response.status_code
-        )
+        except requests.RequestException as error:
 
-        return "STOP"
+            print()
+            print(
+                f"네트워크 오류 "
+                f"({attempt}/{MAX_RETRIES}):",
+                error
+            )
+
+            if attempt < MAX_RETRIES:
+                print("1분 후 다시 시도합니다.")
+                time.sleep(RETRY_WAIT_SECONDS)
+                continue
+
+            print("→ 해당 날짜 SKIP")
+            return "SKIP"
 
 
-    # -----------------------------------------------------
+        # -------------------------------------------------
+        # API 호출 한도 초과
+        # -------------------------------------------------
+
+        if response.status_code == 429:
+
+            print()
+            print("================================")
+            print("API 호출 한도 초과 (429)")
+            print("전체 수집을 중단합니다.")
+            print("나중에 다시 실행하면 이어서 수집됩니다.")
+            print("================================")
+            print()
+
+            return "STOP"
+
+
+        # -------------------------------------------------
+        # 서버 일시 오류
+        # 500 / 502 / 503 / 504
+        # -------------------------------------------------
+
+        if response.status_code in (500, 502, 503, 504):
+
+            print()
+            print(
+                f"서버 오류 {response.status_code} "
+                f"({attempt}/{MAX_RETRIES})"
+            )
+
+            if attempt < MAX_RETRIES:
+                print("1분 후 다시 시도합니다.")
+                time.sleep(RETRY_WAIT_SECONDS)
+                continue
+
+            print(
+                f"→ {response.status_code} 반복 발생, "
+                "해당 날짜 SKIP"
+            )
+
+            return "SKIP"
+
+
+        # -------------------------------------------------
+        # 그 외 HTTP 오류
+        # -------------------------------------------------
+
+        if response.status_code != 200:
+
+            print()
+            print(
+                "API 요청 실패:",
+                response.status_code
+            )
+
+            return "STOP"
+
+
+        # -------------------------------------------------
+        # 정상 응답이면 반복문 종료
+        # -------------------------------------------------
+
+        break
+
+
+    # =====================================================
     # JSON 변환
-    # -----------------------------------------------------
+    # =====================================================
 
     try:
         data = response.json()
 
     except ValueError:
+
         print()
         print("JSON 변환 실패")
-        print("수집을 중단합니다.")
+        print("→ 해당 날짜 SKIP")
 
-        return "STOP"
+        return "SKIP"
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # API 자체 오류 응답
-    # -----------------------------------------------------
+    # =====================================================
 
     if "Response" not in data:
 
@@ -136,33 +219,49 @@ def get_congestion(
             error.get("code", "")
         )
 
-        # 실제 데이터 없음
+        error_message = error.get(
+            "message",
+            ""
+        )
+
+
+        # -------------------------------------------------
+        # 데이터 없음
+        # -------------------------------------------------
+
         if error_code == "50":
             return []
+
 
         print()
         print(
             "API 오류:",
             error_code,
-            error.get("message", "")
+            error_message
         )
 
         return "STOP"
 
 
-    # -----------------------------------------------------
-    # 정상 응답
-    # -----------------------------------------------------
+    # =====================================================
+    # 정상 데이터
+    # =====================================================
 
     body = data["Response"]["body"]
 
+
+    # 데이터 없음
     if int(body["totalCount"]) == 0:
         return []
 
+
     items = body["items"]["item"]
 
+
+    # 데이터가 1개면 dict로 올 수 있어서 list로 변경
     if isinstance(items, dict):
         items = [items]
+
 
     return items
 
@@ -185,12 +284,14 @@ def collect_station_range(
         ctpv_cd = station["ctpv_cd"]
         sgg_cd = station["sgg_cd"]
 
+
         print()
         print("============================")
         print("정류장:", station_name)
         print("station_id:", station_id)
         print("지역코드:", ctpv_cd, sgg_cd)
         print("============================")
+
 
         current_date = datetime.strptime(
             start_date,
@@ -203,6 +304,10 @@ def collect_station_range(
         )
 
 
+        # =================================================
+        # 날짜 반복
+        # =================================================
+
         while current_date <= last_date:
 
             date_str = current_date.strftime(
@@ -211,7 +316,7 @@ def collect_station_range(
 
 
             # ------------------------------------------------
-            # 이미 받은 데이터면 API 호출 자체를 하지 않음
+            # 이미 저장된 날짜
             # ------------------------------------------------
 
             if already_collected(
@@ -219,6 +324,7 @@ def collect_station_range(
                 route_id,
                 station_id
             ):
+
                 print(
                     date_str,
                     "/",
@@ -242,6 +348,7 @@ def collect_station_range(
                 end=" "
             )
 
+
             items = get_congestion(
                 date=date_str,
                 route_id=route_id,
@@ -252,11 +359,28 @@ def collect_station_range(
 
 
             # ------------------------------------------------
-            # API 한도 / 오류 발생
+            # 전체 중단
             # ------------------------------------------------
 
             if items == "STOP":
+
+                print()
+                print("전체 수집 중단")
+
                 return False
+
+
+            # ------------------------------------------------
+            # 해당 날짜만 실패
+            # ------------------------------------------------
+
+            if items == "SKIP":
+
+                print("→ 해당 날짜 건너뜀")
+
+                current_date += timedelta(days=1)
+
+                continue
 
 
             # ------------------------------------------------
@@ -264,6 +388,7 @@ def collect_station_range(
             # ------------------------------------------------
 
             if items:
+
                 save_congestion(items)
 
                 print(
@@ -272,13 +397,26 @@ def collect_station_range(
                     "개 저장"
                 )
 
+
+            # ------------------------------------------------
+            # 실제 데이터 없음
+            # ------------------------------------------------
+
             else:
-                print("→ 실제 데이터 없음")
+
+                print(
+                    "→ 실제 데이터 없음"
+                )
 
 
+            # ------------------------------------------------
             # API 과호출 방지
-            time.sleep(1)
+            # ------------------------------------------------
 
+            time.sleep(REQUEST_INTERVAL)
+
+
+            # 다음 날짜
             current_date += timedelta(days=1)
 
 
@@ -305,8 +443,9 @@ if __name__ == "__main__":
     )
 
 
-    # A가 API 제한으로 중단되면
-    # B까지 요청하지 않고 프로그램 종료
+    # -----------------------------------------------------
+    # 5001A 중단
+    # -----------------------------------------------------
 
     if not success_a:
 
@@ -330,6 +469,10 @@ if __name__ == "__main__":
         stations=STATIONS_5001B,
     )
 
+
+    # -----------------------------------------------------
+    # 5001B 중단
+    # -----------------------------------------------------
 
     if not success_b:
 
