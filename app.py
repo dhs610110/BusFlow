@@ -1,22 +1,23 @@
 import sqlite3
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from config import STATIONS_5001A, STATIONS_5001B
+
 
 app = Flask(__name__)
 
 DB_PATH = "data/busflow.db"
-STATION_NAMES = {}
 
-for station in STATIONS_5001A + STATIONS_5001B:
-    STATION_NAMES[station["id"]] = station["name"]
+STATION_NAMES = {
+    station["id"]: station["name"]
+    for station in STATIONS_5001A + STATIONS_5001B
+}
 
 
 def get_db_connection():
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
-
     return connection
 
 
@@ -53,15 +54,13 @@ def get_routes():
 
     connection.close()
 
-    routes = []
-
-    for row in rows:
-        routes.append(
-            {
-                "route_id": row["route_id"],
-                "data_count": row["data_count"],
-            }
-        )
+    routes = [
+        {
+            "route_id": row["route_id"],
+            "data_count": row["data_count"],
+        }
+        for row in rows
+    ]
 
     return jsonify(routes)
 
@@ -79,28 +78,25 @@ def get_stations(route_id):
         WHERE route_id = ?
         ORDER BY station_seq
         """,
-        (route_id,)
+        (route_id,),
     ).fetchall()
 
     connection.close()
 
-    stations = []
-
-    for row in rows:
-        station_id = row["station_id"]
-
-        stations.append(
-            {
-                "station_id": station_id,
-                "station_name": STATION_NAMES.get(
-                    station_id,
-                    "알 수 없는 정류장"
+    stations = [
+        {
+            "station_id": row["station_id"],
+            "station_name": STATION_NAMES.get(
+                row["station_id"],
+                "알 수 없는 정류장",
             ),
             "station_seq": row["station_seq"],
-            }
-    )
+        }
+        for row in rows
+    ]
 
     return jsonify(stations)
+
 
 @app.route("/api/congestion/<route_id>/<station_id>")
 def get_congestion(route_id, station_id):
@@ -118,23 +114,22 @@ def get_congestion(route_id, station_id):
         GROUP BY time_zone
         ORDER BY time_zone
         """,
-        (route_id, station_id)
+        (route_id, station_id),
     ).fetchall()
 
     connection.close()
 
-    congestion_data = []
-
-    for row in rows:
-        congestion_data.append(
-            {
-                "time_zone": row["time_zone"],
-                "avg_congestion": row["avg_congestion"],
-                "data_count": row["data_count"],
-            }
-        )
+    congestion_data = [
+        {
+            "time_zone": row["time_zone"],
+            "avg_congestion": row["avg_congestion"],
+            "data_count": row["data_count"],
+        }
+        for row in rows
+    ]
 
     return jsonify(congestion_data)
+
 
 @app.route("/api/congestion/<route_id>/<station_id>/by-day")
 def get_congestion_by_day(route_id, station_id):
@@ -153,22 +148,20 @@ def get_congestion_by_day(route_id, station_id):
         GROUP BY dow_nm, time_zone
         ORDER BY dow_nm, time_zone
         """,
-        (route_id, station_id)
+        (route_id, station_id),
     ).fetchall()
 
     connection.close()
 
-    congestion_data = []
-
-    for row in rows:
-        congestion_data.append(
-            {
-                "day": row["dow_nm"],
-                "time_zone": row["time_zone"],
-                "avg_congestion": row["avg_congestion"],
-                "data_count": row["data_count"],
-            }
-        )
+    congestion_data = [
+        {
+            "day": row["dow_nm"],
+            "time_zone": row["time_zone"],
+            "avg_congestion": row["avg_congestion"],
+            "data_count": row["data_count"],
+        }
+        for row in rows
+    ]
 
     return jsonify(congestion_data)
 
