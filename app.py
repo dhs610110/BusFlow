@@ -1,13 +1,6 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from live_bus_service import get_live_arrival
-
-import os
-
-PROJECT_ROOT = os.path.dirname(
-    os.path.abspath(__file__)
-)
 
 from flask import (
     Flask,
@@ -15,6 +8,9 @@ from flask import (
     request,
     send_from_directory,
 )
+
+from live_bus_service import get_live_arrival
+from services.highway_predictor import predict_highway_time
 
 
 # ==================================================
@@ -127,7 +123,6 @@ EXPECTED_SEAT_GAIN_BY_HOUR = {
 
     # ------------------------------
     # 5001B 양재 → 신논현
-    # 누적 좌석 감소
     # ------------------------------
     ("5001B", "양재역", "신논현역"): {
         17: 23.8,
@@ -566,8 +561,6 @@ def calc_station_alternative_score(
         elif second_bus_seats <= 10:
             score += 7
 
-    # 뒤차가 금방 오고 좌석이 많으면
-    # 앞 정류장 이동 필요성을 크게 낮춤
     if (
         first_bus_seats is not None
         and second_bus_seats is not None
@@ -1244,8 +1237,6 @@ def create_candidate(
         )
     )
 
-    # replay 시 사용자가 출발 가능한 시각보다
-    # 먼저 지나간 버스는 제외
     if (
         bus_departure_time
         <
@@ -1365,6 +1356,7 @@ def apply_strategy_to_candidates(
 
     for candidate in candidates:
         candidate = candidate.copy()
+
         strategy = strategy_map.get(
             candidate["route"]
         )
@@ -1395,10 +1387,12 @@ def apply_strategy_to_candidates(
 
         candidate["base_score"] = base_score
         candidate["strategy_adjustment"] = adjustment
+
         candidate["final_score"] = round(
             base_score + adjustment,
             1,
         )
+
         candidate["boarding_strategy"] = (
             strategy["strategy"]
             if strategy
@@ -1439,7 +1433,10 @@ def recommend():
     )
 
     if not data:
-        return jsonify({"error": "JSON 데이터가 필요합니다."}), 400
+        return jsonify({
+            "error":
+                "JSON 데이터가 필요합니다."
+        }), 400
 
     required_fields = [
         "date",
@@ -1451,50 +1448,177 @@ def recommend():
 
     for field in required_fields:
         if field not in data:
-            return jsonify(
-                {"error": f"{field} 값이 필요합니다."}
-            ), 400
+            return jsonify({
+                "error":
+                    f"{field} 값이 필요합니다."
+            }), 400
 
     date_string = data["date"]
-    start_station = data["start_station"]
-    departure_time_string = data["departure_time"]
-    arrival_time_string = data["arrival_time"]
-    destination = data["destination"]
+
+    start_station = data[
+        "start_station"
+    ]
+
+    departure_time_string = data[
+        "departure_time"
+    ]
+
+    arrival_time_string = data[
+        "arrival_time"
+    ]
+
+    destination = data[
+        "destination"
+    ]
+
+    # ==================================================
+    # 날씨 입력
+    #
+    # 현재:
+    # 프론트/API 요청에서 받은 값을 사용
+    #
+    # 추후:
+    # 실시간 날씨 API 결과로 교체 가능
+    # ==================================================
+
+    weather = data.get(
+        "weather",
+        {}
+    )
+
+    temperature = weather.get(
+        "temperature"
+    )
+
+    humidity = weather.get(
+        "humidity"
+    )
+
+    wind_speed = weather.get(
+        "wind_speed"
+    )
+
+    rainfall = weather.get(
+        "rainfall",
+        0.0,
+    )
 
     try:
         target_datetime = datetime.strptime(
-            f"{date_string} {departure_time_string}",
+            (
+                f"{date_string} "
+                f"{departure_time_string}"
+            ),
             "%Y-%m-%d %H:%M",
         )
+
         desired_arrival = datetime.strptime(
-            f"{date_string} {arrival_time_string}",
+            (
+                f"{date_string} "
+                f"{arrival_time_string}"
+            ),
             "%Y-%m-%d %H:%M",
         )
+
     except ValueError:
-        return jsonify(
-            {"error": "날짜는 YYYY-MM-DD, 시간은 HH:MM 형식이어야 합니다."}
-        ), 400
+        return jsonify({
+            "error":
+                "날짜는 YYYY-MM-DD, "
+                "시간은 HH:MM 형식이어야 합니다."
+        }), 400
 
     if desired_arrival <= target_datetime:
-        return jsonify(
-            {"error": "도착시간은 출발시간보다 늦어야 합니다."}
-        ), 400
+        return jsonify({
+            "error":
+                "도착시간은 출발시간보다 늦어야 합니다."
+        }), 400
+
+
+    # ==================================================
+    # 고속도로 RF 예측
+    #
+    # 현재 weather가 들어온 경우에만 실행.
+    #
+    # 모델 예측 실패 시에도
+    # 버스 추천 API 자체는 계속 동작하도록 한다.
+    # ==================================================
+
+    highway_prediction = None
+
+    if (
+        temperature is not None
+        and humidity is not None
+        and wind_speed is not None
+    ):
+        try:
+            highway_prediction = (
+                predict_highway_time(
+                    hour=
+                        target_datetime.hour,
+
+                    day_of_week=
+                        target_datetime.weekday(),
+
+                    temperature=
+                        float(temperature),
+
+                    humidity=
+                        float(humidity),
+
+                    wind_speed=
+                        float(wind_speed),
+
+                    rainfall=
+                        float(rainfall),
+                )
+            )
+
+        except Exception as e:
+            print(
+                "[HIGHWAY MODEL ERROR]",
+                e,
+            )
+
+
+    # ==================================================
+    # 방향 결정
+    # ==================================================
 
     if start_station == "기흥역":
-        route_names = ["5001A", "5003A"]
+
+        route_names = [
+            "5001A",
+            "5003A",
+        ]
+
         direction = "A"
+
     elif start_station == "신논현역":
-        route_names = ["5001B", "5003B"]
+
+        route_names = [
+            "5001B",
+            "5003B",
+        ]
+
         direction = "B"
+
     else:
-        return jsonify(
-            {"error": "현재 MVP는 기흥역 또는 신논현역 출발을 지원합니다."}
-        ), 400
+        return jsonify({
+            "error":
+                "현재 MVP는 기흥역 또는 "
+                "신논현역 출발을 지원합니다."
+        }), 400
+
+
+    # ==================================================
+    # 후보 / 전략 생성
+    # ==================================================
 
     candidates = []
     strategies = []
 
     for route_name in route_names:
+
         row = get_realtime_snapshot(
             route_name,
             start_station,
@@ -1505,75 +1629,152 @@ def recommend():
             continue
 
         if direction == "A":
-            strategy = build_a_boarding_strategy(
-                route_name,
-                start_station,
-                row,
-                target_datetime,
+
+            strategy = (
+                build_a_boarding_strategy(
+                    route_name,
+                    start_station,
+                    row,
+                    target_datetime,
+                )
             )
+
         else:
-            strategy = build_b_boarding_strategy(
-                route_name,
-                start_station,
-                row,
-                target_datetime,
+
+            strategy = (
+                build_b_boarding_strategy(
+                    route_name,
+                    start_station,
+                    row,
+                    target_datetime,
+                )
             )
 
         if strategy is not None:
-            strategies.append(strategy)
+            strategies.append(
+                strategy
+            )
 
         for bus_number in [1, 2]:
+
             candidate = create_candidate(
-                route_name=route_name,
-                bus_number=bus_number,
-                row=row,
-                target_datetime=target_datetime,
-                desired_arrival=desired_arrival,
-                start_station=start_station,
+                route_name=
+                    route_name,
+
+                bus_number=
+                    bus_number,
+
+                row=
+                    row,
+
+                target_datetime=
+                    target_datetime,
+
+                desired_arrival=
+                    desired_arrival,
+
+                start_station=
+                    start_station,
             )
 
             if candidate is not None:
-                candidates.append(candidate)
+                candidates.append(
+                    candidate
+                )
+
+
+    # ==================================================
+    # 후보 없음
+    # ==================================================
 
     if not candidates:
-        return jsonify(
-            {"error": "해당 시점 이후 탑승 가능한 수집 버스 데이터가 없습니다."}
-        ), 404
+        return jsonify({
+            "error":
+                "해당 시점 이후 탑승 가능한 "
+                "수집 버스 데이터가 없습니다.",
 
-    candidates = apply_strategy_to_candidates(
-        candidates,
-        strategies,
+            "highway_prediction":
+                highway_prediction,
+        }), 404
+
+
+    # ==================================================
+    # 탑승 전략 점수 반영
+    # ==================================================
+
+    candidates = (
+        apply_strategy_to_candidates(
+            candidates,
+            strategies,
+        )
     )
 
-    def final_sort_key(candidate):
-        deadline = candidate["deadline_met"]
+
+    # ==================================================
+    # 후보 정렬
+    # ==================================================
+
+    def final_sort_key(
+        candidate
+    ):
+        deadline = candidate[
+            "deadline_met"
+        ]
 
         if deadline is True:
             deadline_priority = 2
+
         elif deadline is None:
             deadline_priority = 1
+
         else:
             deadline_priority = 0
 
         return (
             deadline_priority,
-            candidate["final_score"],
+            candidate[
+                "final_score"
+            ],
         )
 
+
     candidates.sort(
-        key=final_sort_key,
-        reverse=True,
+        key=
+            final_sort_key,
+
+        reverse=
+            True,
     )
+
+
+    # ==================================================
+    # 정상 추천 후보
+    # ==================================================
 
     valid_candidates = [
         candidate
-        for candidate in candidates
+
+        for candidate
+        in candidates
+
         if (
-            candidate["final_score"] >= 0
-            and candidate["boarding_strategy"]
-            not in ["move_upstream", "high_risk"]
+            candidate[
+                "final_score"
+            ] >= 0
+
+            and
+
+            candidate[
+                "boarding_strategy"
+            ]
+
+            not in [
+                "move_upstream",
+                "high_risk",
+            ]
         )
     ]
+
 
     recommended = (
         valid_candidates[0]
@@ -1581,118 +1782,266 @@ def recommend():
         else None
     )
 
+
+    # ==================================================
+    # 정상 후보가 없을 경우
+    # 앞 정류장 / 위험 전략 선택
+    # ==================================================
+
     recommended_strategy = None
 
     if recommended is None:
+
         move_strategies = [
             strategy
-            for strategy in strategies
-            if strategy["strategy"] == "move_upstream"
+
+            for strategy
+            in strategies
+
+            if strategy[
+                "strategy"
+            ] == "move_upstream"
         ]
 
         if move_strategies:
+
             move_strategies.sort(
-                key=lambda strategy: strategy.get(
-                    "alternative_score",
-                    0,
-                ),
+                key=lambda strategy:
+                    strategy.get(
+                        "alternative_score",
+                        0,
+                    ),
+
                 reverse=True,
             )
-            recommended_strategy = move_strategies[0]
+
+            recommended_strategy = (
+                move_strategies[0]
+            )
+
         else:
+
             risk_strategies = [
                 strategy
-                for strategy in strategies
-                if strategy["strategy"] == "high_risk"
+
+                for strategy
+                in strategies
+
+                if strategy[
+                    "strategy"
+                ] == "high_risk"
             ]
+
             if risk_strategies:
-                recommended_strategy = risk_strategies[0]
+                recommended_strategy = (
+                    risk_strategies[0]
+                )
+
+
+    # ==================================================
+    # 추천 이유
+    # ==================================================
 
     reasons = []
 
     if recommended is not None:
-        seats = recommended["remain_seats"]
+
+        seats = recommended[
+            "remain_seats"
+        ]
 
         if seats is not None:
-            if seats >= 20:
-                reasons.append("현재 잔여좌석이 비교적 여유롭습니다.")
-            elif seats >= 10:
-                reasons.append("현재 좌석 여유가 있습니다.")
-            elif seats >= 5:
-                reasons.append("탑승 가능한 좌석은 남아 있지만 여유가 크지 않습니다.")
-            else:
-                reasons.append("현재 잔여좌석이 매우 적습니다.")
 
-        historical = recommended["historical_congestion"]
+            if seats >= 20:
+                reasons.append(
+                    "현재 잔여좌석이 "
+                    "비교적 여유롭습니다."
+                )
+
+            elif seats >= 10:
+                reasons.append(
+                    "현재 좌석 여유가 있습니다."
+                )
+
+            elif seats >= 5:
+                reasons.append(
+                    "탑승 가능한 좌석은 "
+                    "남아 있지만 여유가 크지 않습니다."
+                )
+
+            else:
+                reasons.append(
+                    "현재 잔여좌석이 매우 적습니다."
+                )
+
+        historical = recommended[
+            "historical_congestion"
+        ]
 
         if historical:
+
             reasons.append(
                 "과거 동일 요일·시간대 "
-                f"평균 혼잡도는 {historical['avg_congestion']}입니다."
+                f"평균 혼잡도는 "
+                f"{historical['avg_congestion']}입니다."
             )
 
-        if recommended["deadline_met"] is None:
+        if (
+            recommended[
+                "deadline_met"
+            ] is None
+        ):
             reasons.append(
-                "현재 이동시간 표본 부족으로 마감시간 판정은 아직 반영하지 않았습니다."
+                "현재 이동시간 표본 부족으로 "
+                "마감시간 판정은 아직 "
+                "반영하지 않았습니다."
             )
+
     else:
+
         reasons.append(
-            "현재 정류장에서 바로 탑승하는 것보다 앞 정류장 선탑승이 더 유리합니다."
+            "현재 정류장에서 바로 탑승하는 것보다 "
+            "앞 정류장 선탑승이 더 유리합니다."
         )
 
-        if recommended_strategy is not None:
+        if (
+            recommended_strategy
+            is not None
+        ):
             reasons.append(
-                recommended_strategy["message"]
+                recommended_strategy[
+                    "message"
+                ]
             )
+
+
+    # ==================================================
+    # 고속도로 ML 설명 추가
+    # ==================================================
+
+    if highway_prediction is not None:
+
+        if highway_prediction[
+            "rain_adjusted"
+        ]:
+            reasons.append(
+                "강수 상황을 반영해 "
+                "고속도로 예상 속도를 보정했습니다."
+            )
+
+        reasons.append(
+            "고속도로 약 "
+            f"{highway_prediction['distance_km']}km "
+            "구간의 예상 주행시간은 약 "
+            f"{highway_prediction['highway_minutes']}분입니다."
+        )
+
+
+    # ==================================================
+    # 최종 응답
+    # ==================================================
 
     return jsonify(
         {
             "request": {
-                "date": date_string,
-                "start_station": start_station,
-                "departure_time": departure_time_string,
-                "arrival_time": arrival_time_string,
-                "destination": destination,
-                "direction": direction,
+                "date":
+                    date_string,
+
+                "start_station":
+                    start_station,
+
+                "departure_time":
+                    departure_time_string,
+
+                "arrival_time":
+                    arrival_time_string,
+
+                "destination":
+                    destination,
+
+                "direction":
+                    direction,
+
+                "weather":
+                    weather,
             },
-            "recommended": recommended,
-            "recommended_strategy": recommended_strategy,
-            "boarding_strategies": strategies,
-            "reasons": reasons,
-            "alternatives": candidates,
-            "generated_at": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+
+            "highway_prediction":
+                highway_prediction,
+
+            "recommended":
+                recommended,
+
+            "recommended_strategy":
+                recommended_strategy,
+
+            "boarding_strategies":
+                strategies,
+
+            "reasons":
+                reasons,
+
+            "alternatives":
+                candidates,
+
+            "generated_at":
+                datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
         }
     )
 
-@app.get("/api/realtime/<route_name>")
-def realtime_api(route_name):
 
-    station_name = request.args.get("station")
+# ==================================================
+# 실시간 버스 API
+# ==================================================
+
+@app.get(
+    "/api/realtime/<route_name>"
+)
+def realtime_api(
+    route_name
+):
+    station_name = (
+        request.args.get(
+            "station"
+        )
+    )
 
     if not station_name:
         return jsonify({
-            "error": "station_required"
+            "error":
+                "station_required"
         }), 400
 
     try:
         result = get_live_arrival(
-            route_name=route_name,
-            station_name=station_name,
+            route_name=
+                route_name,
+
+            station_name=
+                station_name,
         )
 
-        return jsonify(result)
+        return jsonify(
+            result
+        )
 
     except ValueError as e:
+
         return jsonify({
-            "error": str(e)
+            "error":
+                str(e)
         }), 400
 
     except Exception as e:
+
         return jsonify({
-            "error": "live_api_failed",
-            "message": str(e)
+            "error":
+                "live_api_failed",
+
+            "message":
+                str(e),
         }), 500
 
 
