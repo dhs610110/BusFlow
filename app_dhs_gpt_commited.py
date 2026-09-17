@@ -93,6 +93,11 @@ friend_app.predict_highway_time = (
 def _inject_weather_notice_ui(
     html: str,
 ) -> str:
+    """
+    친구 HTML의 레이아웃/문구를 재설계하지 않고,
+    원래 비어 있던 날씨 안내 영역과 결과 metric 영역만 채운다.
+    원본 HTML 파일 자체는 수정하지 않는다.
+    """
     old_chip = """<div class="weather-chip">
               추천 계산에 기상 조건을 반영할 수 있도록 연결 예정
             </div>"""
@@ -109,97 +114,53 @@ def _inject_weather_notice_ui(
             1,
         )
 
-    addon = r"""
-<script id="weatherDelayAddon_dhs_gpt_commited">
-(function(){
-  async function refreshWeatherDelayNotice_dhs_gpt_commited(){
-    const box=document.querySelector("#weatherDelayNotice");
-    if(!box) return;
+    css_tag = (
+        '<link rel="stylesheet" '
+        'href="/dhs_gpt_commited/ui.css">'
+    )
 
-    try{
-      const response=await fetch("/api/weather");
-      if(!response.ok) throw new Error("weather api failed");
+    js_tag = (
+        '<script src="/dhs_gpt_commited/ui.js" '
+        'defer></script>'
+    )
 
-      const data=await response.json();
+    if css_tag not in html:
+        html = html.replace(
+            "</head>",
+            f"  {css_tag}\n</head>",
+            1,
+        )
 
-      if(data.weather_notice){
-        box.textContent=data.weather_notice;
-        box.hidden=false;
-      }else{
-        box.textContent="";
-        box.hidden=true;
-      }
-    }catch(error){
-      box.textContent="";
-      box.hidden=true;
-    }
-  }
-
-  const originalRender=
-    typeof window.renderRecommendation==="function"
-      ? window.renderRecommendation
-      : null;
-
-  if(originalRender){
-    window.renderRecommendation=function(data){
-      originalRender(data);
-
-      const r=data?.recommended;
-      if(!r) return;
-
-      const metricGrid=
-        document.querySelector(
-          "#resultContent .result-card .metric-grid"
-        );
-
-      if(!metricGrid) return;
-
-      if(r.travel_time_minutes!=null){
-        metricGrid.insertAdjacentHTML(
-          "beforeend",
-          `
-          <div class="metric">
-            <span>예상 소요시간</span>
-            <b>${Number(r.travel_time_minutes).toFixed(1)}분</b>
-          </div>
-          `
-        );
-      }
-
-      if(r.estimated_arrival_time){
-        metricGrid.insertAdjacentHTML(
-          "beforeend",
-          `
-          <div class="metric">
-            <span>예상 도착</span>
-            <b>${String(r.estimated_arrival_time)}</b>
-          </div>
-          `
-        );
-      }
-    };
-  }
-
-  window.addEventListener(
-    "load",
-    refreshWeatherDelayNotice_dhs_gpt_commited
-  );
-})();
-</script>
-"""
-
-    if (
-        "weatherDelayAddon_dhs_gpt_commited"
-        not in html
-    ):
+    if js_tag not in html:
         html = html.replace(
             "</body>",
-            addon + "\n</body>",
+            f"  {js_tag}\n</body>",
             1,
         )
 
     return html
 
+
+@app.get("/dhs_gpt_commited/ui.js")
+def ui_js_dhs_gpt_commited():
+    return Response(
+        (
+            PROJECT_ROOT
+            / "Time_Keeper_ui_dhs_gpt_commited.js"
+        ).read_text(encoding="utf-8"),
+        mimetype="application/javascript",
+    )
+
+
+@app.get("/dhs_gpt_commited/ui.css")
+def ui_css_dhs_gpt_commited():
+    return Response(
+        (
+            PROJECT_ROOT
+            / "Time_Keeper_ui_dhs_gpt_commited.css"
+        ).read_text(encoding="utf-8"),
+        mimetype="text/css",
+    )
 
 def timekeeper_dhs_gpt_commited():
     source = (
