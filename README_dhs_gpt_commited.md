@@ -20,14 +20,17 @@ pip install -r requirements_dhs_gpt_commited.txt
 
 - 기존 `app.py` 수정 없음
 - 기존 `services/highway_predictor.py` 수정 없음
-- 기존 HTML 파일 수정 없음
+- 기존 `Time_Keeper_mid_prototype.html` 수정 없음
+- 기존 HTML의 날씨 placeholder 영역만 런타임에 실제 기상 지연 안내로 채움
+- 기존 결과 카드의 빈 metric 공간에 `예상 소요시간`, `예상 도착`만 추가
+- 경로 결과에는 강수 지연률 숫자를 노출하지 않음
+- 결과 화면에는 필요할 때 `기상 예보가 예상 소요시간에 반영되었습니다.` 정도만 표시
 - 2022·2025·2026 데이터에서 계산한 계절별 baseline 사용
 - 겨울 12~2 / 봄 3~5 / 여름 6~8 / 가을 9~11
 - 평일/휴일 × 06/07/08시 baseline
 - 강수 여부가 아니라 **시간당 강수량(mm/h)** 기반 지연 가중치
 - 강수량 knot 사이 선형 보간
-- 메인 날씨 카드 아래에서만 지연률 문구 표시
-- 경로 탐색 결과에는 지연률 자체를 표시하지 않음
+- 메인 날씨 카드 아래에서만 `비 때문에 평소보다 몇 % 지연되는지` 안내
 - 경로 결과에는 기상보정이 들어간 최종 예상 소요시간/도착시각 표시
 - 프론트의 5001 / 5003 선택을 `/api/recommend-v2`에 반영
 - `safe` / `fast` 선택을 추천 후보 정렬에 반영
@@ -49,6 +52,16 @@ pip install -r requirements_dhs_gpt_commited.txt
 ```
 
 따라서 로컬도로/정류장 구간을 새 고속도로 시간과 중복해서 더하지 않습니다.
+
+## HTML 적용 방식
+
+원본 HTML 파일은 그대로 둡니다. `app_dhs_gpt_commited.py`가 원본 HTML을 읽은 뒤 응답 시점에만 다음을 삽입합니다.
+
+- 날씨 카드의 기존 placeholder → `weatherDelayNotice`
+- `Time_Keeper_ui_dhs_gpt_commited.css`
+- `Time_Keeper_ui_dhs_gpt_commited.js`
+
+따라서 친구의 HTML을 직접 덮어쓰지 않으면서 기존 디자인과 빈 공간만 활용합니다.
 
 ## 날씨 API
 
@@ -90,6 +103,8 @@ GET /api/dhs_gpt_commited/weather-delay?date=2026-07-15&hour=7&rainfall=4.2
 - `app_dhs_gpt_commited.py`
 - `README_dhs_gpt_commited.md`
 - `requirements_dhs_gpt_commited.txt`
+- `Time_Keeper_ui_dhs_gpt_commited.js`
+- `Time_Keeper_ui_dhs_gpt_commited.css`
 - `services/highway_predictor_dhs_gpt_commited.py`
 - `services/weather_delay_service_dhs_gpt_commited.py`
 - `services/weather_delay_config_dhs_gpt_commited.json`
