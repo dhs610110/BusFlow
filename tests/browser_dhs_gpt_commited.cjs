@@ -18,6 +18,9 @@ const assert=require('node:assert/strict');
   assert.match(await page.locator('#resultContent').innerText(),/선택한 정류장의 기존 자료/);
   assert.match(await page.locator('#resultContent').innerText(),/배차 간격 10.2분/);
   assert.equal(await page.locator('#resultContent .result-label').count(),0);
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await page.setViewportSize({width:1280,height:900});
   // Focus interaction fixture checks display only, never substitutes for real data.
   await page.evaluate(()=>renderRecommendation({candidates:[1,2,3].map(rank=>({id:'test-'+rank,rank,route:'5003A',boarding_station:'상호작용 검증',destination:'신논현',departure_time:'07:20',estimated_arrival_time:'08:20',arrival_seconds:600,remain_seats:15,headway_minutes:12,travel_time_minutes:60,margin_minutes:30,stability_grade:'주의',segment_minutes:{local_before:10,giheung_sinnonhyeon:50,local_after:0},reasons:[]}))}));
   await page.locator('[data-candidate-id="test-2"]').click();assert.equal(await page.locator('#resultContent .result-label').innerText(),'2위');
