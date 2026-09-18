@@ -20,5 +20,7 @@ click('c1');assert.match(element('#resultContent').innerHTML,/result-label">BEST
 assert.equal(run('results[0].rank'),1);assert.equal(run('results[1].rank'),2);
 run("startPlan('morning');toggleStation('5003A','1');toggleStation('5003A','2')");assert.equal(run('plan.selected.size'),2);
 run("renderRecommendation({status:'insufficient_data',message:'자료 부족',missing_data:['기록 없음']})");assert.match(element('#resultContent').innerHTML,/자료 부족/);assert.doesNotMatch(element('#resultContent').innerHTML,/result-label">BEST/);
+context.evidenceFixture={status:'insufficient_data',message:'자료 부족',station_evidence:[{route:'5003A',station:'기흥역',hour:7,congestion:{value:86.7,sample_count:11,basis:'날짜별',source:'실제 엑셀'},profile:{headway_minutes:10.25,seat_median:null,seat_mean:5.6,headway_samples:179,basis:'시간대별',note:'원본 집계'}}]};
+run('renderRecommendation(evidenceFixture)');html=element('#resultContent').innerHTML;assert.match(html,/86.7/);assert.match(html,/10.3분/);assert.match(html,/5.6석 \(평균\)/);assert.doesNotMatch(html,/result-label">BEST/);
 console.log('PASS: delegated card clicks 2/4/BEST, original rank order, details, station range, insufficient-data state');
 },0);

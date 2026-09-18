@@ -22,6 +22,8 @@ class Weather:
 
 class IntegratedTests(unittest.TestCase):
     def setUp(self):
+        calendar=patch('services.integrated_data_dhs_gpt_commited.holiday_kind', side_effect=lambda day: 'holiday' if day.weekday()>=5 else 'weekday')
+        calendar.start();self.addCleanup(calendar.stop)
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         (self.root/'services').mkdir();(self.root/'data').mkdir()
         shutil.copy(ROOT/'config.py',self.root/'config.py')

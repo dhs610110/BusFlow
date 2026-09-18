@@ -60,11 +60,12 @@ def recommend(store,external,payload,now=None):
             # Historical forecast, not a published timetable: expected initial wait
             # plus an explicit geometric missed-bus approximation from historical full rate.
             rate=profile['full_rate']
-            if rate>=1:
+            if rate is not None and rate>=1:
                 missing.add(f'{route} · {station["name"]} · {slot.hour:02d}시: 관측 좌석이 모두 만석')
                 slot+=timedelta(minutes=10); continue
-            wait=profile['headway_p75']/2
-            missed=profile['headway_p75']*rate/(1-rate)
+            headway=profile['headway_p75'] or profile['headway_minutes']
+            wait=headway/2
+            missed=headway*rate/(1-rate) if rate is not None else 0
             departure=slot+timedelta(minutes=wait+missed)
             if departure>=deadline: late_count+=1; slot+=timedelta(minutes=10); continue
             travel=store.travel(route,station['realtime_id'],dest['realtime_id'],departure)
@@ -80,13 +81,16 @@ def recommend(store,external,payload,now=None):
             if arrival>deadline: late_count+=1; slot+=timedelta(minutes=10); continue
             margin=(deadline-arrival).total_seconds()/60
             congestion=store.congestion(route,station.get('historical_id'),departure)
-            grade='안전' if rate<=.1 and margin>=15 else '보통' if rate<=.3 and margin>=5 else '주의'
+            risk=rate if rate is not None else 1.0
+            grade='안전' if risk<=.1 and margin>=15 else '보통' if risk<=.3 and margin>=5 else '주의'
             # Sparse history or uncorrected weather must not be presented as high confidence.
             limited=profile['days']<3 or profile['seat_samples']<10 or travel['sample_count']<5
             if limited or not weather.get('available'): grade='주의'
             reasons=[f'{profile["basis"]} 기록에서 배차·좌석을 추정했습니다.',
                      f'이동시간은 {travel["basis"]} 구간 기록 {travel["sample_count"]}건을 사용했습니다.',
-                     '정류장 도착 이후의 예상 대기·만석 지연을 포함합니다. 도보시간은 포함하지 않습니다.']
+                     '정류장 도착 이후의 예상 대기를 포함합니다. 도보시간은 포함하지 않습니다.']
+            if profile.get('note'): reasons.append(profile['note'])
+            if rate is None: reasons.append('만석 빈도 자료가 없어 추가 만석 대기는 계산하지 못했습니다. 표시 도착시각은 만석 지연을 포함하지 않으며 안전도는 주의입니다.')
             if missed>0: reasons.append(f'과거 만석 빈도와 배차를 이용한 추가 대기 추정 {missed:.1f}분을 포함했습니다.')
             if adj['weather_applied']: reasons.append('기흥역→신논현역 범위에만 날씨 가중치를 적용했습니다.')
             elif adj['scope_supported']: reasons.append('예보를 받지 못해 날씨 보정 없이 기존 이동시간을 표시합니다.')
@@ -95,14 +99,16 @@ def recommend(store,external,payload,now=None):
             c=dict(route=route,boarding_station=station['name'],destination=dest['name'],
                    station_ready_time=slot.strftime('%H:%M'),departure_time=departure.strftime('%H:%M'),
                    estimated_arrival_time=arrival.strftime('%H:%M'),arrival_datetime=arrival.isoformat(),
-                   arrival_seconds=round((wait+missed)*60),remain_seats=profile['seat_median'],
+                   arrival_seconds=round((wait+missed)*60),remain_seats=profile['seat_median'] if profile['seat_median'] is not None else round(profile['seat_mean'],1),
+                   seat_statistic='평균' if profile['seat_median'] is None else '중앙값',
+                   full_rate_known=rate is not None,
                    headway_minutes=profile['headway_minutes'],missed_bus_delay_minutes=round(missed,1),
                    travel_time_minutes=round(adj['minutes'],1),margin_minutes=round(margin,1),
                    stability_grade=grade,deadline_met=True,source='과거 기록 기반 예측 · 실시간 차량 아님',
                    historical_congestion=congestion,profile_samples=profile['seat_samples'],history_days=profile['days'],
                    segment_minutes=dict(local_before=round(adj['pre_minutes'],1),giheung_sinnonhyeon=round(adj['core_minutes'],1),local_after=round(adj['after_minutes'],1)),
                    weather_applied=adj['weather_applied'],reasons=reasons,
-                   _risk=rate,_limited=limited)
+                   _risk=risk,_limited=limited)
             candidates.append(c)
             slot+=timedelta(minutes=10)
     if payload.get('risk_mode')=='fast':
@@ -126,4 +132,20 @@ def recommend(store,external,payload,now=None):
     return dict(status=status,message=message,candidates=chosen,recommended=chosen[0] if chosen else None,
                 missing_data=sorted(missing),coverage_complete=not missing,considered=considered,
                 late_candidates=late_count,request=payload,
+                station_evidence=station_evidence(store,selected,start),
+                local_section_evidence={route:store.workbooks.sections(route,start) for route in sorted({r for r,_ in seen})},
                 model_note='안전도는 검증된 도착 확률이 아닌 과거 표본 기반 등급입니다. 미래 승차시각은 운행 시간표가 아닌 추정입니다.')
+
+
+def station_evidence(store,selections,target):
+    evidence=[]; seen=set()
+    for selection in selections:
+        route=selection.get('route_name')
+        if route not in store.catalog: continue
+        stop=next((s for s in store.catalog[route]['boarding'] if str(s['id'])==str(selection.get('id'))),None)
+        if not stop or (route,stop['id']) in seen: continue
+        seen.add((route,stop['id']))
+        profile=store.profile(route,stop['realtime_id'],target)
+        congestion=store.congestion(route,stop.get('historical_id'),target)
+        evidence.append(dict(route=route,station=stop['name'],hour=target.hour,profile=profile,congestion=congestion))
+    return evidence

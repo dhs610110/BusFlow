@@ -97,7 +97,7 @@ class WorkbookData:
         result={}
         for route in ('5003A','5003B'):
             for r in sheet(self.root,DATED,route+'_날짜시간'):
-                time=excel_date(r['날짜']).replace(hour=int(r['시간대'][:2]))
+                time=excel_date(r['날짜'])+timedelta(hours=int(r['시간대'][:2]))
                 for key,value in r.items():
                     if not key.startswith('혼잡도_') or value is None: continue
                     sid=lookup.get((route,int(key.split('_')[1])))
@@ -111,14 +111,25 @@ class WorkbookData:
             if rows: return dict(value=round(sum(r['value'] for r in rows)/len(rows),1),sample_count=len(rows),basis=basis+' · 날짜별 정류장 평균',source=DATED,sheet=route+'_날짜시간')
         if not summary_usable(self.root,CONGESTION,target): return None
         dow=['월요일','화요일','수요일','목요일','금요일','토요일','일요일'][target.weekday()]
-        rows=[r for r in sheet(self.root,CONGESTION,'전체_상세') if r['route_name']==route and str(r['station_id'])==str(station) and int(str(r['time_zone'])[:2])==target.hour and r['dow_nm']==dow and r['avg_congestion'] is not None]
+        rows=[r for r in sheet(self.root,CONGESTION,'전체_상세') if r['route_name']==route and str(r['station_id'])==str(station) and int(str(r['time_zone'])[:2])%24==target.hour and r['dow_nm']==(['월요일','화요일','수요일','목요일','금요일','토요일','일요일'][(target.weekday()-int(str(r['time_zone'])[:2])//24)%7]) and r['avg_congestion'] is not None]
         count=sum(int(r['data_count']) for r in rows)
         if count:
             return dict(value=round(sum(float(r['avg_congestion'])*int(r['data_count']) for r in rows)/count,1),sample_count=count,basis='동일 요일·시간 집계 (계절·공휴일 미분리)',source=CONGESTION,sheet='전체_상세')
         return None
 
+    def sections(self,route,target):
+        """Descriptive local-section travel only; never substitute for the whole commute."""
+        groups={}
+        for r in sheet(self.root,DROPS,'raw_drops'):
+            if r['route_name']!=route: continue
+            time=excel_date(r['prev_time'])
+            if time.date()>=target.date() or time.hour!=target.hour: continue
+            key=r['section']; groups.setdefault(key,[]).append(float(r['travel_min']))
+        return [dict(section=k,mean_minutes=round(sum(v)/len(v),1),samples=len(v),
+                     source=DROPS,sheet='raw_drops',basis='동일 시간대 · 요일 미분리 · 서울 시내 일부 구간') for k,v in sorted(groups.items())]
+
     def sources(self):
-        return [dict(file=f,available=(self.root/f).is_file(),purpose=p) for f,p in [
+        return [dict(file=f,available=(self.root/f).is_file(),purpose=p,usage='reference' if f.endswith('.csv') else 'connected') for f,p in [
             (HEADWAY,'시간대별 배차 간격·좌석 평균'),(CONGESTION,'5001 요일·시간 혼잡도'),
             (DATED,'5003 날짜·시간·정류장 혼잡도'),(DROPS,'서울 B방향 구간 관측 기록'),
             ('data/highway_speed.csv','고속도로 속도 원자료 · 전체 버스 소요시간 아님')]]

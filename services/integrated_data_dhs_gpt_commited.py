@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from statistics import median
+from services.workbook_data_dhs_gpt_commited import WorkbookData
 
 ROOT = Path(__file__).resolve().parents[1]
 HIST_ROUTES = {'5001A':'41006433','5001B':'41006248','5003A':'41006409','5003B':'41006064'}
@@ -31,7 +32,7 @@ def literal_config(root=ROOT):
 
 
 def canon(name):
-    name = str(name or '')
+    name = str(name or '').replace('컨트리크럽','컨트리클럽')
     for key in ['신논현','강남대','강남역','양재역','기흥역','뱅뱅','우성','교육개발원','매헌','말죽거리']:
         if key in name: return key
     return name.replace(' ', '').replace('(중)', '')
@@ -101,6 +102,7 @@ class DataStore:
     def __init__(self, root=ROOT):
         self.root=Path(root); self.catalog=catalog(root); self._rows={}; self._runs={}; self._profiles={}; self._trips={}; self._congestions={}; self._location_cache={}
         self.config=literal_config(root)
+        self.workbooks=WorkbookData(root)
 
     def read(self, filename, table):
         key=(filename,table)
@@ -269,6 +271,9 @@ class DataStore:
                         full_rate=sum(s==0 for s in seats)/len(seats),seat_samples=len(seats),
                         headway_samples=len(intervals),days=len(by_day),basis=label,
                         source='historical_arrival_estimates' if any(p['estimated'] for p in selected) else 'historical_station_passages')
+        if result is None:
+            stop=next((s for s in self.catalog[route]['boarding'] if s['realtime_id']==station),None)
+            if stop: result=self.workbooks.headway(route,stop['name'],target,canon)
         self._profiles[key]=result
         return result
 
@@ -281,11 +286,12 @@ class DataStore:
         for r in self.read(file,'congestion'):
             if str(r.get('route_id'))!=HIST_ROUTES[route] or str(r.get('station_id'))!=str(historical_id): continue
             try:
-                hour=int(str(r['time_zone'])[:2]); t=dt(r['opr_ymd']).replace(hour=hour)
+                hour=int(str(r['time_zone'])[:2]); t=dt(r['opr_ymd'])+timedelta(hours=hour)
             except (ValueError,TypeError,KeyError): continue
             n=number(r.get('congestion'))
             if n is not None: samples.append(dict(time=t,value=n))
         rows,label=self.comparable(samples,target)
-        result=dict(value=round(sum(r['value'] for r in rows)/len(rows),1),sample_count=len(rows),basis=label) if rows else None
+        result=dict(value=round(sum(r['value'] for r in rows)/len(rows),1),sample_count=len(rows),basis=label,source='data/'+file+' / congestion') if rows else None
+        if result is None: result=self.workbooks.congestion(route,historical_id,target,self.comparable)
         self._congestions[key]=result
         return result
