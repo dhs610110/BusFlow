@@ -19,6 +19,30 @@ async function api(path,options={}){
   }finally{clearTimeout(timer);}
 }
 function startPlan(mode){
+  // 출근 / 퇴근에 따라 추천 성향 문구 변경
+  const safeBtn = document.getElementById('riskSafe');
+  const fastBtn = document.getElementById('riskFast');
+
+  if (safeBtn && fastBtn) {
+    if (mode === 'morning') {
+      safeBtn.querySelector('b').textContent = '여유로운 준비';
+      safeBtn.querySelector('small').textContent =
+        '조금 더 여유롭게 준비하고 출발하세요. 다만 좌석 혼잡도가 비교적 높을 수 있습니다.';
+
+      fastBtn.querySelector('b').textContent = '여유로운 도착';
+      fastBtn.querySelector('small').textContent =
+        '조금 일찍 출발해 목표 시간보다 여유 있게 도착합니다.';
+    } else {
+      safeBtn.querySelector('b').textContent = '빠른 귀가';
+      safeBtn.querySelector('small').textContent =
+        '가능한 빠르게 귀가할 수 있는 경로를 추천합니다.';
+
+      fastBtn.querySelector('b').textContent = '여유로운 귀가';
+      fastBtn.querySelector('small').textContent =
+        '조금 더 여유롭게 이동하며 혼잡도와 좌석 상황을 고려합니다.';
+    }
+  }
+
   plan={mode,routeFamily:'all',selected:new Set(),ranges:{},destination:null,riskMode:'safe',departureAny:false,deadlineAny:false};
   $('#departureTime').value=mode==='morning'?'07:00':'17:30';$('#deadlineTime').value=mode==='morning'?'08:50':'19:00';
   $('#timePageTitle').textContent=mode==='morning'?'출근 경로 설정':'퇴근 경로 설정';
@@ -40,7 +64,7 @@ function goStations(){
   plan.selected.clear();plan.ranges={};plan.destination=null;renderStations();renderDestinations();
   $('#summaryDirection').textContent=plan.mode==='morning'?'용인 → 서울':'서울 → 용인';
   $('#summaryRoute').textContent=routes().join(' · ');$('#summaryDeparture').textContent=plan.departureAny?'05:00부터 탐색':plan.departureTime;
-  $('#summaryDeadline').textContent=plan.deadlineAny?'당일 23:59까지':plan.deadlineTime;
+  $('#summaryDeadline').textContent=plan.deadlineAny?'상관없음':plan.deadlineTime;
   showPage('stations');loadWeather(`${plan.date}T${plan.departureAny?'05:00':plan.departureTime}`);
 }
 function renderStations(){
@@ -92,13 +116,244 @@ function renderRecommendation(data){
 function candidateLabel(c){return c.rank===1?'BEST':`${c.rank}위`;}
 function renderFocused(){
   const data=lastResponse||{}, c=results.find(r=>r.id===focusedId);
-  if(!c){$('#resultContent').innerHTML=`<div class="result-hero"><h3>${esc(data.message||'추천 결과 없음')}</h3><p>${data.status==='insufficient_data'?'자료 부족과 실제 도착 불가능은 다릅니다. 선택한 정류장의 혼잡도·배차는 아래에서 확인할 수 있습니다. 선택한 시간대의 배차·좌석 또는 경로 설정 자료를 확인해주세요.':'출발 가능시각을 앞당기거나 도착 마감을 늦춰 다시 검색해주세요.'}</p></div>${evidenceCards(data)}${sectionEvidence(data)}${coverage(data)}`;return;}
-  const metrics=[['정류장 도착 권장',c.station_ready_time],['예상 승차',c.departure_time],['예상 도착',c.estimated_arrival_time],['마감 여유',c.margin_minutes+'분'],[c.full_rate_known===false?'예상 대기 (만석 지연 미계산)':'예상 대기·만석 지연',(c.arrival_seconds/60).toFixed(1)+'분'],['과거 좌석 '+(c.seat_statistic||'중앙값'),c.remain_seats+'석'],['과거 추정 배차',Number(c.headway_minutes).toFixed(1)+'분'],[c.travel_estimated?'모델 추정 이동시간':'기록 기반 이동시간',c.travel_time_minutes+'분'],['과거 혼잡도',c.historical_congestion?.value??'자료 없음']];
-  $('#resultContent').innerHTML=`<div id="focused-candidate" class="result-hero" tabindex="-1"><div class="best-topline-final"><div class="result-label">${candidateLabel(c)}</div><span class="stability-badge-final">${esc(c.stability_grade)}</span></div><h3>${esc(c.route)} · ${esc(c.boarding_station)}</h3><p>→ ${esc(c.destination)}</p><p class="data-note-final">${esc(c.source)}</p></div><div class="result-card"><h4>${candidateLabel(c)} 상세 정보</h4><div class="metric-grid">${metrics.map(([label,value])=>`<div class="metric"><span>${label}</span><b>${esc(value)}</b></div>`).join('')}</div><div class="segment-note"><b>구간별 이동시간${c.travel_estimated?' · 추정 포함':''}</b>${c.travel_scenario_minutes?.length?`<p>가정 민감도 범위 ${c.travel_scenario_minutes[0]}~${c.travel_scenario_minutes[1]}분 · 실측 오차범위 아님</p><p>가정한 경로 거리 ${esc(c.assumed_distance_km)}km · 실측 거리 아님</p>`:''}<p>날씨 보정 제외 구간 ① ${c.segment_minutes.local_before}분 · 기흥역→신논현역 범위 ${c.segment_minutes.giheung_sinnonhyeon}분 · 날씨 보정 제외 구간 ② ${c.segment_minutes.local_after}분</p></div><ul>${c.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div><h3 class="other-heading">다른 추천 <small>클릭하면 위에서 자세히 볼 수 있어요.</small></h3><div class="alternatives-integrated">${results.filter(r=>r.id!==focusedId).sort((a,b)=>a.rank-b.rank).map(r=>`<button type="button" class="alt-card-final candidate-switch" data-candidate-id="${esc(r.id)}" aria-label="${candidateLabel(r)} ${esc(r.route)} 상세 보기"><span class="alt-label">${candidateLabel(r)}</span><h4>${esc(r.route)} · ${esc(r.boarding_station)}</h4><p>${esc(r.departure_time)} 승차 → ${esc(r.estimated_arrival_time)} 도착</p><span>${esc(r.stability_grade)} · ${r.margin_minutes}분 여유</span></button>`).join('')}</div><p class="data-note-final">${esc(data.model_note||'')}</p>${evidenceCards(data)}${sectionEvidence(data)}${coverage(data)}`;
+
+  if(!c){
+    $('#resultContent').innerHTML=`
+      <div class="result-hero">
+        <h3>${esc(data.message||'추천 결과 없음')}</h3>
+        <p>${data.status==='insufficient_data'
+          ?'현재 조건에서는 추천을 확정하기 위한 데이터가 부족합니다.'
+          :'출발 가능시각을 앞당기거나 도착 마감을 늦춰 다시 검색해주세요.'}</p>
+      </div>
+      <details class="result-card gta-details">
+        <summary>데이터 분석 근거 보기</summary>
+        ${evidenceCards(data)}
+        ${sectionEvidence(data)}
+        ${coverage(data)}
+      </details>`;
+    return;
+  }
+
+  const seatRaw=c.remain_seats==null?NaN:Number(c.remain_seats);
+
+  let seatText='예측 데이터 부족';
+
+  if(Number.isFinite(seatRaw) && seatRaw>0){
+    seatText=`약 ${Math.round(seatRaw)}석`;
+  }else if(Number.isFinite(seatRaw) && seatRaw<=0){
+    seatText='좌석 여유 낮음';
+  }
+
+  const congestionRaw=c.predicted_congestion??c.historical_congestion?.value??NaN;
+  let congestionText='자료 부족';
+
+  if(Number.isFinite(congestionRaw)){
+    if(congestionRaw>=80) congestionText=`높음 · ${Math.round(congestionRaw)}`;
+    else if(congestionRaw>=50) congestionText=`보통 · ${Math.round(congestionRaw)}`;
+    else congestionText=`낮음 · ${Math.round(congestionRaw)}`;
+  }
+
+  const readyTime=c.station_ready_time||c.departure_time||'시간 확인 필요';
+  const destination=c.destination||'목적지';
+  const boardingStation=c.boarding_station||'탑승 정류장';
+
+  const detailMetrics=[
+    ['정류장 도착 권장',readyTime],
+    ['예상 승차',c.departure_time||'자료 부족'],
+    ['예상 도착',c.estimated_arrival_time||'자료 부족'],
+    ['마감 여유',plan.deadlineAny?'-':(c.margin_minutes!=null?`${c.margin_minutes}분`:'자료 부족')],
+    [
+      c.full_rate_known===false?'예상 대기':'예상 대기·만석 지연',
+      c.arrival_seconds!=null?`${(c.arrival_seconds/60).toFixed(1)}분`:'자료 부족'
+    ],
+    ['과거 좌석',seatText],
+    [
+      '과거 추정 배차',
+      Number.isFinite(Number(c.headway_minutes))
+        ? `${Number(c.headway_minutes).toFixed(1)}분`
+        : '자료 부족'
+    ],
+    [
+      '예상 이동시간',
+      c.travel_time_minutes!=null?`${c.travel_time_minutes}분`:'자료 부족'
+    ],
+    [c.predicted_congestion!=null?'ML 예상 혼잡도':'과거 혼잡도',congestionText]
+  ];
+
+  const alternatives=results
+    .filter(r=>r.id!==focusedId)
+    .sort((a,b)=>a.rank-b.rank)
+    .map(r=>`
+      <button
+        type="button"
+        class="gta-alt-card candidate-switch"
+        data-candidate-id="${esc(r.id)}"
+        aria-label="${candidateLabel(r)} ${esc(r.route)} 상세 보기"
+      >
+        <div class="gta-alt-top">
+          <span>${candidateLabel(r)}</span>
+          <b>${esc(r.stability_grade||'')}</b>
+        </div>
+
+        <h4>${esc(r.route)} · ${esc(r.boarding_station)}</h4>
+
+        <div class="gta-alt-time">
+          ${esc(r.departure_time||'--:--')}
+          <span>→</span>
+          ${esc(r.estimated_arrival_time||'--:--')}
+        </div>
+
+        <p>
+          ${r.margin_minutes!=null
+            ? `도착 마감 ${esc(r.margin_minutes)}분 여유`
+            : '도착 여유 정보 부족'}
+        </p>
+      </button>
+    `).join('');
+
+  $('#resultContent').innerHTML=`
+    <section id="focused-candidate" class="gta-best-card" tabindex="-1">
+
+      <div class="gta-best-head">
+        <div>
+          <span class="gta-best-label">GTA ${candidateLabel(c)}</span>
+          <span class="stability-badge-final">${esc(c.stability_grade||'추천')}</span>
+        </div>
+        <span class="gta-route-badge">${esc(c.route)}</span>
+      </div>
+
+      <div class="gta-action">
+        <span class="gta-action-time">${esc(readyTime)}</span>
+        <div>
+          <strong>까지 ${esc(boardingStation)}에 도착하세요</strong>
+          <p>목표 시간 내 도착을 위한 추천 출발 계획입니다.</p>
+        </div>
+      </div>
+
+      <div class="gta-timeline">
+        <div class="gta-timeline-point">
+          <span>정류장 도착</span>
+          <b>${esc(readyTime)}</b>
+          <small>${esc(boardingStation)}</small>
+        </div>
+
+        <div class="gta-timeline-line">
+          <span>${esc(c.route)}</span>
+        </div>
+
+        <div class="gta-timeline-point">
+          <span>버스 탑승</span>
+          <b>${esc(c.departure_time||'--:--')}</b>
+          <small>${esc(c.route)}</small>
+        </div>
+
+        <div class="gta-timeline-line">
+          <span>${c.travel_time_minutes!=null?`${esc(c.travel_time_minutes)}분`:'이동'}</span>
+        </div>
+
+        <div class="gta-timeline-point">
+          <span>예상 도착</span>
+          <b>${esc(c.estimated_arrival_time||'--:--')}</b>
+          <small>${esc(destination)}</small>
+        </div>
+      </div>
+
+      <div class="gta-key-metrics">
+        <div>
+          <span>도착 여유</span>
+          <b>${plan.deadlineAny?'-':(c.margin_minutes!=null?`${esc(c.margin_minutes)}분`:'자료 부족')}</b>
+        </div>
+
+        <div>
+          <span>예상 좌석</span>
+          <b>${esc(seatText)}</b>
+        </div>
+
+        <div>
+          <span>혼잡 수준</span>
+          <b>${esc(congestionText)}</b>
+        </div>
+
+        <div>
+          <span>예상 소요</span>
+          <b>${c.travel_time_minutes!=null?`${esc(c.travel_time_minutes)}분`:'자료 부족'}</b>
+        </div>
+      </div>
+
+      <div class="gta-source-note">
+        ${esc(c.source||'실시간 및 과거 데이터를 함께 반영한 추천')}
+      </div>
+    </section>
+
+    ${alternatives?`
+      <section class="gta-other-section">
+        <div class="gta-section-head">
+          <div>
+            <span>ALTERNATIVES</span>
+            <h3>다른 선택지</h3>
+          </div>
+          <small>카드를 누르면 BEST 영역에서 자세히 비교할 수 있습니다.</small>
+        </div>
+
+        <div class="gta-alternatives">
+          ${alternatives}
+        </div>
+      </section>
+    `:''}
+
+    <details class="gta-analysis-details">
+      <summary>
+        <span>
+          <b>추천 근거 자세히 보기</b>
+          <small>배차 · 좌석 · 혼잡도 · 이동시간 · ML 분석</small>
+        </span>
+        <span class="gta-detail-arrow">⌄</span>
+      </summary>
+
+      <div class="gta-analysis-body">
+
+        <div class="result-card">
+          <h4>${candidateLabel(c)} 상세 데이터</h4>
+
+          <div class="metric-grid">
+            ${detailMetrics.map(([label,value])=>`
+              <div class="metric">
+                <span>${label}</span>
+                <b>${esc(value)}</b>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="segment-note">
+            <b>구간별 이동시간</b>
+            <p>
+              대상 구간 전 ${c.segment_minutes?.local_before??'자료 부족'}분 ·
+              기흥역→신논현역 범위 ${c.segment_minutes?.giheung_sinnonhyeon??'자료 부족'}분 ·
+              대상 구간 후 ${c.segment_minutes?.local_after??'자료 부족'}분
+            </p>
+          </div>
+
+          ${c.reasons?.length?`
+            <ul>
+              ${c.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}
+            </ul>
+          `:''}
+        </div>
+
+        ${data.model_note?`
+          <p class="data-note-final">${esc(data.model_note)}</p>
+        `:''}
+
+        ${evidenceCards(data)}
+        ${sectionEvidence(data)}
+        ${coverage(data)}
+      </div>
+    </details>
+  `;
 }
 function evidenceCards(data){
   if(!data.station_evidence?.length)return '';
-  return `<section class="result-card"><h3>선택한 정류장의 기존 자료</h3><p>출발 가능시각의 시간대별 비교입니다. 이동시간 기록이 없는 구간은 별도 모델로 추정하며, 아래 혼잡도·배차·좌석은 기존 자료입니다.</p><div class="evidence-grid">${data.station_evidence.map(e=>{const p=e.profile,c=e.congestion;return `<article class="evidence-item"><b>${esc(e.route)} · ${esc(e.station)}</b><p>${e.hour}시 · 혼잡도 ${c?esc(c.value):'자료 없음'}</p><p>배차 간격 ${p?Number(p.headway_minutes).toFixed(1)+'분':'자료 없음'} · 잔여좌석 ${p?Number(p.seat_median??p.seat_mean).toFixed(1)+'석 ('+(p.seat_median==null?'평균':'중앙값')+')':'자료 없음'}</p>${c?`<small>${esc(c.basis)} · ${c.sample_count}건<br>${esc(c.source||'기존 DB')}</small>`:''}${p?`<p><small>${esc(p.basis)} · ${p.headway_samples}건<br>${esc(p.note||p.source)}</small></p>`:''}</article>`;}).join('')}</div></section>`;
+  return `<section class="result-card"><h3>선택한 정류장의 기존 자료</h3><p>출발 가능시각의 시간대별 비교입니다. 전체 소요시간이 없으면 도착 가능 여부와 BEST를 판정하지 않습니다.</p><div class="evidence-grid">${data.station_evidence.map(e=>{const p=e.profile,c=e.congestion;return `<article class="evidence-item"><b>${esc(e.route)} · ${esc(e.station)}</b><p>${e.hour}시 · 혼잡도 ${c?esc(c.value):'자료 없음'}</p><p>배차 간격 ${p?Number(p.headway_minutes).toFixed(1)+'분':'자료 없음'} · 잔여좌석 ${p?Number(p.seat_median??p.seat_mean).toFixed(1)+'석 ('+(p.seat_median==null?'평균':'중앙값')+')':'자료 없음'}</p>${c?`<small>${esc(c.basis)} · ${c.sample_count}건<br>${esc(c.source||'기존 DB')}</small>`:''}${p?`<p><small>${esc(p.basis)} · ${p.headway_samples}건<br>${esc(p.note||p.source)}</small></p>`:''}</article>`;}).join('')}</div></section>`;
 }
 function sectionEvidence(data){
   const rows=Object.entries(data.local_section_evidence||{}).flatMap(([route,list])=>list.map(s=>({...s,route})));
@@ -130,8 +385,8 @@ async function init(){
   $('#destinationList').addEventListener('click',e=>{const b=e.target.closest('[data-destination]');if(b){plan.destination=b.dataset.destination;renderDestinations();}});
   $('#resultContent').addEventListener('click',e=>{const b=e.target.closest('[data-candidate-id]');if(b)focusCandidate(b.dataset.candidateId);});
   $('#liveStation').addEventListener('change',()=>{clearInterval(liveTimer);$('#liveCards').innerHTML='';$('#liveStatus').textContent='조회 버튼을 눌러주세요.';updateLiveSelectionPreview();});
-  try{catalog=await api('/api/catalog');updateLiveStations();const h=await api('/api/health');const missing=Object.entries(h.databases).filter(([k,v])=>!v.exists).map(([k])=>k);$('#dataModeBadge_dhs_gpt_commited').textContent=missing.length?'서버 연결 · 일부 자료 미연결':'서버 연결 · 기존 자료 사용';const notes=[];const linked=(h.sources||[]).filter(s=>s.available&&s.usage!=='reference');if(h.travel_model_enabled)notes.push('이동시간 모델 추정 사용 · 실측 정확도 미검증.');if(linked.length)notes.push('혼잡도·배차 등 기존 XLSX '+linked.length+'개 연결.');if(missing.length)notes.push('연결되지 않은 기존 DB: '+missing.join(', ')+'. 엑셀 자료를 함께 읽으며, 이동시간 기록이 없는 구간은 거리·속도 가정 모델로 추정합니다.');if(h.holiday_calendar_available===false)notes.push('공휴일 패키지가 없어 토·일만 휴일로 구분합니다. 기존 추가 requirements를 설치해주세요.');$('#databaseNotice').textContent=notes.join(' ');}
-  catch(e){$('#dataModeBadge_dhs_gpt_commited').textContent='서버 연결 실패';$('#databaseNotice').textContent=e.message;}
+  try{catalog=await api('/api/catalog');updateLiveStations();const h=await api('/api/health');const missing=Object.entries(h.databases).filter(([k,v])=>!v.exists).map(([k])=>k);$('#dataModeBadge_dhs_gpt_commited').textContent=missing.length?'서버 연결 · 일부 자료 미연결':'서버 연결 · 기존 자료 사용';const notes=[];const linked=(h.sources||[]).filter(s=>s.available&&s.usage!=='reference');if(linked.length)notes.push('혼잡도·배차 등 기존 XLSX '+linked.length+'개 연결.');if(missing.length)notes.push('연결되지 않은 기존 DB: '+missing.join(', ')+'. 엑셀 자료를 함께 읽으며, 전체 이동시간이 없는 후보는 도착 여부를 판단하지 않습니다.');if(h.holiday_calendar_available===false)notes.push('공휴일 패키지가 없어 토·일만 휴일로 구분합니다. 기존 추가 requirements를 설치해주세요.');}
+  catch(e){console.error('초기화 실패:',e);$('#dataModeBadge_dhs_gpt_commited').textContent='서버 연결 실패';}
   loadWeather();
 }
 if(typeof window!=='undefined')Object.assign(window,{showPage,startPlan,setRoute,toggleAny,goStations,clearStations,setRisk,runRecommendation,updateLiveStations,loadLive,loadWeather,focusCandidate});

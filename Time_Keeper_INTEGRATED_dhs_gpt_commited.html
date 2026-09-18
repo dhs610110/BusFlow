@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Time Keeper</title>
+  <title>GTA · Guaranteed Time Arrival</title>
   <meta name="description" content="실시간 좌석, 배차, 날씨, 과거 혼잡도를 반영하는 광역버스 추천 서비스" />
 
   <style>
@@ -1342,17 +1342,17 @@
 <div class="app">
 
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark">T</div>
-      <span>Time Keeper</span>
+    <div class="brand" onclick="showPage('home')" role="button" title="홈으로 이동">
+      <div class="brand-mark">G</div>
+      <span>GTA</span>
     </div>
 
     <div class="top-actions">
-      <span id="dataModeBadge_dhs_gpt_commited" class="data-mode-badge-final">연결 확인 중</span>
       <button class="ghost-small" onclick="showPage('home')">Home</button>
       <button class="ghost-small" onclick="showPage('live')">● Live Info</button>
     </div>
   </header>
+<div id="dataModeBadge_dhs_gpt_commited" style="max-width:1180px;margin:12px auto;color:#a8b4c8;font-size:12px;padding:0 20px" role="status">GTA · 데이터 연결 중</div>
 
   <!-- HOME -->
   <section id="page-home" class="page active">
@@ -1362,18 +1362,17 @@
         <div class="hero-copy">
           <div class="eyebrow">
             <span class="live-dot"></span>
-            DEADLINE-AWARE METROPOLITAN BUS ROUTING
+            GUARANTEED TIME ARRIVAL · METROPOLITAN BUS ROUTING
           </div>
 
-          <h1>
-            TIME<br>
-            <span class="red">KEEPER</span>
+          <h1 class="gta-hero-title">
+            GTA<span class="red">.</span>
           </h1>
+          <div class="gta-fullname">GUARANTEED TIME ARRIVAL</div>
 
           <p class="hero-sub">
-            실시간 좌석 · 배차 · 날씨 · 과거 혼잡도를 함께 분석해
-            <strong>언제, 어디서, 어떤 광역버스를 타야 더 안정적인지</strong>
-            추천합니다.
+            실시간 배차 · 혼잡도 · 날씨 · 과거 데이터를 함께 분석해
+            <strong>목표 시간까지 도착하기 위한 가장 안정적인 광역버스 경로</strong>를 추천합니다.
           </p>
 
           <div class="home-actions">
@@ -1401,15 +1400,21 @@
           <div id="weather-giheung" class="weather-card"><b>기흥구 날씨</b><p>시간별 예보를 불러오는 중</p></div>
           <div id="weather-gangnam" class="weather-card"><b>강남구 날씨</b><p>시간별 예보를 불러오는 중</p></div>
           <div id="weatherDelayNotice" class="weather-chip" hidden></div>
-          <p class="hint">지역별 대표 지점 예보 · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a></p>
-          <button class="tiny-btn" onclick="loadWeather()">현재 시간대 예보 새로고침</button>
-          <p id="databaseNotice"></p>
+          <button
+            type="button"
+            class="gta-data-refresh-btn"
+            onclick="loadWeather()"
+          >
+            ↻ 날씨 새로고침
+          </button>
+
+          <div class="weather-source-mini">예보 데이터 · Open-Meteo</div>
         </div>
       </div>
 
       <section class="home-section">
         <div class="section-label">DATA LAYERS</div>
-        <h2 class="section-title">Time Keeper가 보는 변수</h2>
+        <h2 class="section-title">GTA가 보는 변수</h2>
         <p class="section-desc">
           한 가지 지표만 보지 않습니다. 실시간 버스 상태와 과거 패턴, 시간 제약, 날씨를 조합해 실제 탑승 의사결정에 가까운 추천을 만듭니다.
         </p>
@@ -1448,13 +1453,12 @@
           <article class="feature-card">
             <div class="num">06 · RISK</div>
             <h3>위험 허용 수준</h3>
-            <p>안정 우선과 시간 우선 모드를 분리해 동일한 상황에서도 사용자 목적에 맞는 다른 추천을 제공합니다.</p>
+            <p>안정 우선과 여유로운 준비 모드를 분리해 동일한 상황에서도 사용자 목적에 맞는 다른 추천을 제공합니다.</p>
           </article>
         </div>
-        <div class="data-note-final" style="margin-top:18px;">
-          고속도로 자료에서 구한 강수 가중치를 기흥역→신논현역 구간에 한정해 적용합니다(출근 06~08시). 구간 전체 적용은 근사이며 나머지 구간은 기존 기록을 사용합니다.
-          퇴근 방향은 검증되지 않은 출근용 고속도로 가중치를 억지로 사용하지 않고,
-          실시간/수집 좌석·과거 혼잡·실주행 통계를 중심으로 추천합니다.
+        <div class="data-note-final gta-data-note" style="margin-top:18px;">
+          실제 추천 결과에서는 사용 가능한 실시간 정보와 과거 혼잡 패턴을 함께 사용하고,
+          부족한 값은 화면에 NULL로 노출하지 않습니다.
         </div>
 
       </section>
@@ -1510,7 +1514,7 @@
       </section>
 
       <div class="footer">
-        Time Keeper · Hackathon Prototype
+        GTA · Guaranteed Time Arrival · Hackathon Prototype
       </div>
     </div>
   </section>
@@ -1660,13 +1664,13 @@
             <h4 style="margin-top:18px;">추천 성향</h4>
             <div class="risk-row">
               <button id="riskSafe" class="risk-btn active" onclick="setRisk('safe')">
-                <b>안정 우선</b>
-                <small>탑승 실패 위험을 더 낮춤</small>
+                <b>여유로운 준비</b>
+                <small>조금 더 여유롭게 준비하고 출발하세요. 다만 좌석 혼잡도가 비교적 높을 수 있습니다.</small>
               </button>
 
               <button id="riskFast" class="risk-btn" onclick="setRisk('fast')">
-                <b>시간 우선</b>
-                <small>더 빠른 도착을 우선</small>
+                <b>여유로운 도착</b>
+                <small>조금 일찍 출발해 목표 시간보다 여유 있게 도착합니다.</small>
               </button>
             </div>
           </div>
@@ -1686,7 +1690,7 @@
           <button class="back-btn" onclick="showPage('stations')">←</button>
           <div class="flow-title">
             <h2>추천 결과</h2>
-            <p>선택한 승차 범위의 과거 좌석·배차·혼잡도·이동시간과 예보를 비교합니다.</p>
+            <p>목표 도착시간을 기준으로 가장 안정적인 출발 시각과 탑승 후보를 비교합니다.</p>
           </div>
         </div>
 
@@ -1797,6 +1801,14 @@
         </div>
 
         <div id="liveCards" class="live-grid"></div>
+
+        <button
+          type="button"
+          class="gta-data-refresh-btn gta-live-refresh"
+          onclick="loadLive()"
+        >
+          ↻ 도착정보 새로고침
+        </button>
       </div>
     </div>
   </section>
@@ -1811,6 +1823,6 @@
 
 
 
-<script src="integrated_dhs_gpt_commited.js"></script>
+<script src="/integrated_dhs_gpt_commited.js"></script>
 </body>
 </html>
