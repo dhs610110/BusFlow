@@ -17,16 +17,22 @@ const assert=require('node:assert/strict');
   await page.evaluate(()=>runRecommendation());
   assert.match(await page.locator('#resultContent').innerText(),/선택한 정류장의 기존 자료/);
   assert.match(await page.locator('#resultContent').innerText(),/배차 간격 10.2분/);
-  assert.equal(await page.locator('#resultContent .result-label').count(),0);
+  assert.equal(await page.locator('#resultContent .result-label').innerText(),'BEST');
+  assert.match(await page.locator('#resultContent').innerText(),/모델 추정 이동시간/);
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
   await page.setViewportSize({width:1280,height:900});
-  // Focus interaction fixture checks display only, never substitutes for real data.
-  await page.evaluate(()=>renderRecommendation({candidates:[1,2,3].map(rank=>({id:'test-'+rank,rank,route:'5003A',boarding_station:'상호작용 검증',destination:'신논현',departure_time:'07:20',estimated_arrival_time:'08:20',arrival_seconds:600,remain_seats:15,headway_minutes:12,travel_time_minutes:60,margin_minutes:30,stability_grade:'주의',segment_minutes:{local_before:10,giheung_sinnonhyeon:50,local_after:0},reasons:[]}))}));
-  await page.locator('[data-candidate-id="test-2"]').click();assert.equal(await page.locator('#resultContent .result-label').innerText(),'2위');
-  assert.deepEqual(await page.locator('.candidate-switch .alt-label').allTextContents(),['BEST','3위']);
+  await page.locator('[data-candidate-id="candidate-2"]').click();
+  assert.equal(await page.locator('#resultContent .result-label').innerText(),'2위');
+  assert.deepEqual(await page.locator('.candidate-switch .alt-label').allTextContents(),['BEST','3위','4위']);
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
-  assert.deepEqual(errors,[]);console.log('PASS: actual XLSX data, missing-travel state, real card clicks and mobile overflow');
+  await page.evaluate(()=>startPlan('evening'));
+  await page.locator('#planDate').fill(new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(future));
+  await page.evaluate(()=>{goStations();const r='5003B',s=catalog[r].boarding.at(-1);toggleStation(r,s.id);plan.destination=catalog[r].destinations.at(-1).name;renderDestinations();});
+  await page.evaluate(()=>runRecommendation());
+  assert.match(await page.locator('#resultContent').innerText(),/퇴근은 서울 방향 CSV를 재사용하지 않고/);
+  assert.equal(await page.locator('#resultContent .result-label').innerText(),'BEST');
+  assert.deepEqual(errors,[]);console.log('PASS: real XLSX + CSV modeled A/B recommendations, real rank clicks, mobile layout; no external API calls');
  }finally{if(browser)await browser.close();server.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1});

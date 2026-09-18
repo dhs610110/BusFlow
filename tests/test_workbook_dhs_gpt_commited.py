@@ -43,7 +43,8 @@ class WorkbookTests(unittest.TestCase):
         self.assertTrue(rows)
         self.assertTrue(all('기흥' not in r['section'] for r in rows))
         self.assertIsNone(self.store.travel('5001A',GIHEUNG,SINNON,self.target))
-    def test_actual_sources_wsgi_response_without_travel_fabrication(self):
+    def test_actual_sources_wsgi_response_when_model_disabled(self):
+        self.store.travel_model.enabled=False
         stop=self.store.catalog['5003A']['boarding'][-1]
         payload=dict(date='2026-09-21',departure_time='07:00',arrival_time='09:00',commute_mode='morning',selected_boarding_stations=[dict(route_name='5003A',id=stop['id'])],destination='신논현역')
         result=recommend(self.store,NoNetwork(),payload,now=datetime(2026,9,18))

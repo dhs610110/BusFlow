@@ -34,7 +34,7 @@ class Application:
         if method=='GET' and path=='/api/catalog': return 200,self.store_factory(self.root).catalog,'application/json'
         if method=='GET' and path=='/api/health':
             store=self.store_factory(self.root)
-            return 200,dict(status='ready',databases=store.health(),sources=store.workbooks.sources(),offline=os.getenv('BUSFLOW_OFFLINE')=='1',
+            return 200,dict(status='ready',databases=store.health(),sources=store.workbooks.sources(),travel_model_enabled=store.travel_model.enabled,offline=os.getenv('BUSFLOW_OFFLINE')=='1',
                             key_configured=bool(os.getenv('DATA_API_KEY')),api_tested=False,
                             holiday_calendar_available=__import__('importlib.util',fromlist=['find_spec']).find_spec('holidays') is not None),'application/json'
         if method=='GET' and path=='/api/weather':

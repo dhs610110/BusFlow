@@ -1,0 +1,28 @@
+{
+  "version": "hackathon-estimate-v1",
+  "enabled": true,
+  "note": "아래 거리·속도·정차시간은 실측·지도 경로 조회값이 아닌 해커톤 모델 가정입니다. 정류장 목록의 순서를 사용하며 실제 도로 형상을 복원하지 않습니다.",
+  "local_adjacent_distance_km": 0.6,
+  "local_speed_kmh": 20,
+  "seoul_speed_kmh": 16,
+  "stop_dwell_minutes": 0.5,
+  "access_road_distance_km": 3.0,
+  "highway_start_km": 392.5,
+  "highway_end_km": 415.3,
+  "minimum_vds_locations": 9,
+  "northbound_fallback_speed_kmh": 50,
+  "southbound_assumed_speed_kmh": 45,
+  "seoul_stop_offset_km": {
+    "매헌시민의숲.양재꽃시장": 0.0,
+    "말죽거리공원사거리": 1.8,
+    "양재역": 2.3,
+    "뱅뱅사거리": 3.1,
+    "우성아파트": 3.7,
+    "강남역": 4.3,
+    "신논현역": 5.3
+  },
+  "reverse_yongin_geometry": "A 방향 정류장 간 기본 거리의 역순 근사. 반대편 실시간 정류장 ID로 사용하지 않음",
+  "reverse_seoul_geometry": "기존 B 방향 정류장 순서대로 신논현까지 이동 후 고속도로로 복귀하는 것으로 근사",
+  "scenario_low_factor": 0.8,
+  "scenario_high_factor": 1.3
+}

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from statistics import median
 from services.workbook_data_dhs_gpt_commited import WorkbookData
+from services.travel_model_dhs_gpt_commited import TravelModel
 
 ROOT = Path(__file__).resolve().parents[1]
 HIST_ROUTES = {'5001A':'41006433','5001B':'41006248','5003A':'41006409','5003B':'41006064'}
@@ -103,6 +104,7 @@ class DataStore:
         self.root=Path(root); self.catalog=catalog(root); self._rows={}; self._runs={}; self._profiles={}; self._trips={}; self._congestions={}; self._location_cache={}
         self.config=literal_config(root)
         self.workbooks=WorkbookData(root)
+        self.travel_model=TravelModel(root)
 
     def read(self, filename, table):
         key=(filename,table)
@@ -125,7 +127,7 @@ class DataStore:
             self._location_cache[route]=[r for r in self.read('realtime.db','realtime_location') if r.get('route_name')==route]
         return self._location_cache[route]
 
-    def resolve_destination(self,route,dest):
+    def resolve_destination(self,route,dest,allow_model=False):
         # Only accept a destination present in our server-side catalog.
         matches=[s for s in self.catalog[route]['destinations'] if str(s['id'])==str(dest) or canon(s['name'])==canon(dest)]
         if not matches: return None
@@ -138,6 +140,7 @@ class DataStore:
             name=row.get('station_name') or names.get(rid,'')
             if name and canon(name)==canon(s['name']): ids.add(rid)
         if len(ids)==1: s['realtime_id']=ids.pop(); return s
+        if allow_model and self.travel_model.enabled: s['model_only']=True; return s
         return None
 
     def runs(self,route):
@@ -222,6 +225,11 @@ class DataStore:
                     return dict(total=total,pre=0.,core=total,after=0.,scope=True,core_offset=0,
                                 sample_count=int(count),basis='기존 노선·시간대 p75 (요일 미분리)',source='legacy_core_stats')
         return None
+
+    def journey(self,route,station,dest,target):
+        observed=self.travel(route,station['realtime_id'],dest['realtime_id'],target) if dest.get('realtime_id') else None
+        if observed: return observed
+        return self.travel_model.estimate(route,station,dest,target,self.catalog,self.comparable,self.workbooks.sections(route,target))
 
     def profile(self,route,station,target):
         key=(route,station,target.date(),target.hour)

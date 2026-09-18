@@ -1,4 +1,4 @@
-"""Existing-data recommendation. Never generate demo seats, ETAs or travel times."""
+"""Existing-data recommendation. Observed data first; explicit approved travel assumptions when records are absent."""
 from datetime import datetime, timedelta
 from services.integrated_data_dhs_gpt_commited import seasonal, number
 from services.weather_delay_service_dhs_gpt_commited import get_rain_delay_weight
@@ -48,8 +48,8 @@ def recommend(store,external,payload,now=None):
         if not station: raise ValueError('서버 목록에 없는 승차 정류장입니다.')
         if (route,station['id']) in seen: continue
         seen.add((route,station['id']))
-        dest=store.resolve_destination(route,destination)
-        if not dest or not dest.get('realtime_id'):
+        dest=store.resolve_destination(route,destination,allow_model=True)
+        if not dest:
             missing.add(f'{route} · {destination}: 해당 방향의 도착 정류장 기록 없음'); insufficient+=1; continue
         slot=start
         while slot<deadline:
@@ -68,7 +68,7 @@ def recommend(store,external,payload,now=None):
             missed=headway*rate/(1-rate) if rate is not None else 0
             departure=slot+timedelta(minutes=wait+missed)
             if departure>=deadline: late_count+=1; slot+=timedelta(minutes=10); continue
-            travel=store.travel(route,station['realtime_id'],dest['realtime_id'],departure)
+            travel=store.journey(route,station,dest,departure)
             if not travel:
                 missing.add(f'{route} · {station["name"]} → {dest["name"]} · {departure.hour:02d}시: 구간 이동시간 표본 없음')
                 insufficient+=1; slot+=timedelta(minutes=10); continue
@@ -86,16 +86,19 @@ def recommend(store,external,payload,now=None):
             # Sparse history or uncorrected weather must not be presented as high confidence.
             limited=profile['days']<3 or profile['seat_samples']<10 or travel['sample_count']<5
             if limited or not weather.get('available'): grade='주의'
+            modeled=travel.get('estimated',False)
+            if modeled: grade='추정 · 여유 있음' if margin>=15 else '추정 · 여유 적음'
             reasons=[f'{profile["basis"]} 기록에서 배차·좌석을 추정했습니다.',
-                     f'이동시간은 {travel["basis"]} 구간 기록 {travel["sample_count"]}건을 사용했습니다.',
+                     '이동시간은 실측 버스 운행 기록이 없는 구간을 모델로 추정했습니다.' if modeled else f'이동시간은 {travel["basis"]} 구간 기록 {travel["sample_count"]}건을 사용했습니다.',
                      '정류장 도착 이후의 예상 대기를 포함합니다. 도보시간은 포함하지 않습니다.']
+            if modeled: reasons.extend(travel['notes'])
             if profile.get('note'): reasons.append(profile['note'])
-            if rate is None: reasons.append('만석 빈도 자료가 없어 추가 만석 대기는 계산하지 못했습니다. 표시 도착시각은 만석 지연을 포함하지 않으며 안전도는 주의입니다.')
+            if rate is None: reasons.append('만석 빈도 자료가 없어 추가 만석 대기는 계산하지 못했습니다. 표시 도착시각은 만석 지연을 포함하지 않습니다.')
             if missed>0: reasons.append(f'과거 만석 빈도와 배차를 이용한 추가 대기 추정 {missed:.1f}분을 포함했습니다.')
             if adj['weather_applied']: reasons.append('기흥역→신논현역 범위에만 날씨 가중치를 적용했습니다.')
             elif adj['scope_supported']: reasons.append('예보를 받지 못해 날씨 보정 없이 기존 이동시간을 표시합니다.')
             else: reasons.append('날씨 보정 지원 구간·시간 밖이므로 기존 구간 이동시간을 사용합니다.')
-            if limited: reasons.append('표본이 적어 안전도는 주의로 표시합니다.')
+            if limited and not modeled: reasons.append('표본이 적어 안전도는 주의로 표시합니다.')
             c=dict(route=route,boarding_station=station['name'],destination=dest['name'],
                    station_ready_time=slot.strftime('%H:%M'),departure_time=departure.strftime('%H:%M'),
                    estimated_arrival_time=arrival.strftime('%H:%M'),arrival_datetime=arrival.isoformat(),
@@ -104,7 +107,11 @@ def recommend(store,external,payload,now=None):
                    full_rate_known=rate is not None,
                    headway_minutes=profile['headway_minutes'],missed_bus_delay_minutes=round(missed,1),
                    travel_time_minutes=round(adj['minutes'],1),margin_minutes=round(margin,1),
-                   stability_grade=grade,deadline_met=True,source='과거 기록 기반 예측 · 실시간 차량 아님',
+                   stability_grade=grade,deadline_met=True,source='이동시간: 모델 추정 · 혼잡도·배차·좌석: 과거 데이터' if modeled else '과거 기록 기반 예측 · 실시간 차량 아님',
+                   travel_estimated=modeled,travel_source=travel['source'],
+                   travel_assumptions=travel.get('notes',[]),highway_evidence=travel.get('highway_evidence'),
+                   assumed_distance_km=travel.get('assumed_distance_km'),
+                   travel_scenario_minutes=[round(adj['minutes']*f,1) for f in travel.get('scenario_factors',[])],
                    historical_congestion=congestion,profile_samples=profile['seat_samples'],history_days=profile['days'],
                    segment_minutes=dict(local_before=round(adj['pre_minutes'],1),giheung_sinnonhyeon=round(adj['core_minutes'],1),local_after=round(adj['after_minutes'],1)),
                    weather_applied=adj['weather_applied'],reasons=reasons,
@@ -130,11 +137,11 @@ def recommend(store,external,payload,now=None):
     status='ok' if chosen else 'insufficient_data' if insufficient or (not considered and not late_count) else 'no_feasible_route'
     message='조건에 맞는 후보를 비교했습니다.' if chosen else '기존 자료가 부족해 도착 가능한 경로를 판단할 수 없습니다.' if status=='insufficient_data' else '해당 시간 내 도착 가능한 경로가 없습니다.'
     return dict(status=status,message=message,candidates=chosen,recommended=chosen[0] if chosen else None,
-                missing_data=sorted(missing),coverage_complete=not missing,considered=considered,
+                missing_data=sorted(missing),coverage_complete=not missing,considered=considered,travel_model_enabled=store.travel_model.enabled,
                 late_candidates=late_count,request=payload,
                 station_evidence=station_evidence(store,selected,start),
                 local_section_evidence={route:store.workbooks.sections(route,start) for route in sorted({r for r,_ in seen})},
-                model_note='안전도는 검증된 도착 확률이 아닌 과거 표본 기반 등급입니다. 미래 승차시각은 운행 시간표가 아닌 추정입니다.')
+                model_note='모델 추정 후보의 여유는 가정한 이동시간으로 계산하며 정시 도착 확률이 아닙니다. 시간 범위는 가정값의 민감도(0.8~1.3배)이며 통계적 신뢰구간이 아닙니다. 만석 미탑승·돌발 정체는 추가될 수 있습니다.')
 
 
 def station_evidence(store,selections,target):
