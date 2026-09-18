@@ -1,3 +1,5 @@
-reqeusts
+requests
 python-dotenv
-openyxl
+openpyxl
+holidays>=0.60
+gunicorn>=23,<24
