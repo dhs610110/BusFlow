@@ -38,7 +38,7 @@ HTML을 더블클릭하는 대신 이 주소로 접속합니다. 기존 `app.py`
 - `busflow_5003.db`: congestion (5003)
 - `realtime.db`: realtime_location, realtime_arrival_a/b 또는 realtime_arrival, 선택적으로 travel_time_stats
 
-GitHub 확인 당시 realtime.db와 busflow_5003.db는 저장소 트리에 없었습니다. busflow.db 바이너리는 이 작업 환경의 커넥터가 읽지 못했습니다. 따라서 이번 검증은 **합성 SQLite fixture를 이용한 코드 검증**이며 실제 DB의 커버리지/예측 정확도 검증은 아닙니다. 합성 fixture는 앱에 제공되지 않고 테스트 임시 폴더에서만 생성됩니다.
+GitHub main에는 realtime.db와 busflow_5003.db가 없습니다. 2026-09-18 GitHub Actions에서 실제 busflow.db 및 루트 weather.db를 읽어 테이블·건수·기간을 확인했고, 실제 XLSX를 이용한 회귀검사를 추가했습니다. 5003 혼잡도는 날짜별 XLSX로 보완됩니다. 전체 이동시간·예측 정확도는 누락된 운행 자료 때문에 검증하지 못했습니다. 합성 SQLite fixture는 코드 검증용 임시 폴더에서만 사용하며 앱에 제공하지 않습니다.
 
 기존 travel_time_stats는 노선·시간대만 키로 가지고 있으므로 **기흥역→신논현역 A 노선에만** 제한적으로 재사용합니다. 다른 목적지에 같은 시간을 복사하지 않습니다. 그 밖의 구간은 realtime_location에 실제 양끝 관측과 해당 방향 정류장 식별이 있어야 합니다. B의 반대편 정류장 ID를 A에서 복사하지 않습니다. 기존 이름 매핑 또는 관측 station_name으로 고유하게 확인되지 않는 목적지는 제외합니다.
 
@@ -50,7 +50,7 @@ GitHub 확인 당시 realtime.db와 busflow_5003.db는 저장소 트리에 없�
 
 ```bash
 # 외부 API를 호출하지 않는 회귀 테스트
-python -m unittest discover -s tests -p test_integrated_dhs_gpt_commited.py -v
+python -m unittest discover -s tests -p 'test_*dhs_gpt_commited.py' -v
 node tests/test_ui_integrated_dhs_gpt_commited.js
 ```
 
