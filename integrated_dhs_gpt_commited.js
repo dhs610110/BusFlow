@@ -39,6 +39,7 @@ function startPlan(mode){
   const fastBtn = document.getElementById('riskFast');
 
   if (safeBtn && fastBtn) {
+    safeBtn.parentNode.insertBefore(fastBtn, safeBtn);
     if (mode === 'morning') {
       safeBtn.querySelector('b').textContent = '여유로운 준비';
       safeBtn.querySelector('small').textContent =
