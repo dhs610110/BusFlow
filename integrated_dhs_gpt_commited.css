@@ -647,3 +647,23 @@ a[onclick*="live"]{
   transform: translateY(-1px);
 }
 
+
+
+/* GTA arrival card refinement */
+.gta-best-card{background:radial-gradient(ellipse at 100% 0%,rgba(62,113,188,.16),transparent 55%),linear-gradient(135deg,#172230,#101720);border:1px solid #354658;box-shadow:0 16px 48px #0003}
+.gta-action-time{color:#f3f8ff;font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+.gta-timeline{background:#182432;border:1px solid #35485c;border-radius:20px;padding:24px;box-shadow:inset 0 1px #ffffff08}
+.gta-timeline-point>span{color:#a9bed3;font-size:12px}
+.gta-timeline-point>b{color:#f4f9ff;font-size:27px;font-variant-numeric:tabular-nums}
+.gta-timeline-point:last-child>b{color:#76dec9}
+.gta-timeline-point>small{color:#b7c7d6;font-size:11px}
+.gta-timeline-line{background:linear-gradient(90deg,#40576e,#69b6c3);height:2px}
+.gta-timeline-line>span{background:#182432;color:#9fb9cd}
+.gta-key-metrics>div{background:#1b2835;border-color:#334454}
+.gta-key-metrics>div>span{color:#a8bed0}
+.gta-countdown-panel{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:18px 0;padding:18px 20px;border-radius:16px;background:linear-gradient(110deg,#233e50,#1b2d3b);border:1px solid #456375}
+.gta-countdown-panel span{display:block;color:#bfd2e0;font-size:11px}
+.gta-countdown-panel b{display:block;margin-top:6px;color:#a6f1df;font-size:22px;font-variant-numeric:tabular-nums}
+.gta-countdown-panel small{flex-basis:100%;color:#a9bdce;font-size:11px;line-height:1.6}
+.gta-countdown-panel button{color:#ecf5ff;border:1px solid #688197;padding:10px 14px}
+@media(max-width:600px){.gta-timeline{padding:16px}.gta-timeline-point>b{font-size:21px}.gta-countdown-panel b{font-size:18px}.gta-countdown-panel{padding:16px}}

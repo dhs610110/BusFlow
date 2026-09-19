@@ -153,10 +153,10 @@ def get_boarding_context(
 
     try:
 
-        live = external.live(
-            route,
-            station["realtime_id"],
-        )
+        # Current arrivals cannot describe a future departure slot.
+        delta = (target - now_kst()).total_seconds()
+        if 0 <= delta <= 300:
+            live = external.live(route, station["realtime_id"])
 
     except Exception:
 

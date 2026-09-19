@@ -4,9 +4,24 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 let catalog={}, results=[], focusedId=null, liveTimer=null, busy=false;
 let plan={mode:'morning',routeFamily:'all',selected:new Set(),ranges:{},destination:null,riskMode:'safe',departureAny:false,deadlineAny:false};
 let weatherVersion=0;
+let readyTimer=null;
+function readyCountdown(date,time,now=Date.now()){
+  const target=Date.parse(`${date}T${time}:00+09:00`);
+  if(!Number.isFinite(target))return '권장 시각 확인 필요';
+  const seconds=Math.ceil((target-now)/1000);
+  if(seconds<=0)return '권장 시각이 지났어요 · 다시 탐색해주세요';
+  const days=Math.floor(seconds/86400), hours=Math.floor(seconds%86400/3600);
+  return `${days?days+'일 ':''}${hours?hours+'시간 ':''}${Math.floor(seconds%3600/60)}분 ${String(seconds%60).padStart(2,'0')}초 남음`;
+}
+function startReadyCountdown(c){
+  clearInterval(readyTimer);
+  const update=()=>{const box=$('#readyCountdown');if(!box){clearInterval(readyTimer);return;}box.textContent=readyCountdown(lastResponse?.request?.date||plan.date,c.station_ready_time||c.departure_time);};
+  update();readyTimer=setInterval(update,1000);
+}
 const kstToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());
 const routes=()=>Object.keys(catalog).filter(r=>r.endsWith(plan.mode==='morning'?'A':'B')&&(plan.routeFamily==='all'||r.startsWith(plan.routeFamily)));
 function showPage(name){
+  if(name!=='result')clearInterval(readyTimer);
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
   if(name!=='live') clearInterval(liveTimer);
   window.scrollTo({top:0,behavior:'smooth'});
@@ -105,7 +120,7 @@ async function runRecommendation(){
     selected_boarding_stations:selected,destination:plan.destination,departure_time:plan.departureAny?null:plan.departureTime,
     arrival_time:plan.deadlineAny?null:plan.deadlineTime,departure_flexible:plan.departureAny,
     risk_mode:plan.riskMode==='safe'?'fast':'safe'};
-  busy=true;showPage('result');$('#resultContent').innerHTML='<div class="result-hero"><h3>경로 탐색중...</h3></div>';
+  clearInterval(readyTimer);busy=true;showPage('result');$('#resultContent').innerHTML='<div class="result-hero"><h3>경로 탐색중...</h3></div>';
   try{const data=await api('/api/recommend-final',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});renderRecommendation(data);}
   catch(e){$('#resultContent').innerHTML=`<div class="result-hero"><h3>추천 정보를 불러오지 못했습니다.</h3><p>${esc(e.message)}</p><p>데모 결과로 대체하지 않습니다.</p><button class="tiny-btn" onclick="runRecommendation()">다시 시도</button></div>`;}
   finally{busy=false;}
@@ -116,6 +131,7 @@ function renderRecommendation(data){
 }
 function candidateLabel(c){return c.rank===1?'BEST':`${c.rank}위`;}
 function renderFocused(){
+  clearInterval(readyTimer);
   const data=lastResponse||{}, c=results.find(r=>r.id===focusedId);
 
   if(!c){
@@ -231,6 +247,7 @@ function renderFocused(){
         </div>
       </div>
 
+      <div class="gta-countdown-panel"><div><span>정류장 도착 권장 시각까지</span><b id="readyCountdown" role="timer" aria-live="off"></b></div><button type="button" class="tiny-btn" onclick="runRecommendation()">경로 다시 탐색</button><small>검색한 계획 기준 · 교통상황과 추천 시각은 다시 탐색할 때 갱신됩니다.</small></div>
       <div class="gta-timeline">
         <div class="gta-timeline-point">
           <span>정류장 도착</span>
@@ -351,6 +368,7 @@ function renderFocused(){
       </div>
     </details>
   `;
+  startReadyCountdown(c);
 }
 function evidenceCards(data){
   if(!data.station_evidence?.length)return '';
@@ -370,6 +388,8 @@ function updateLiveStations(){
 }
 function updateLiveSelectionPreview(){$('#liveSelectionPreview').textContent=$('#liveRoute').value+$('#liveDirection').value+' · '+($('#liveStation').selectedOptions[0]?.textContent||'정류장 선택');}
 function renderLive(data,elapsed=0){
+  if(data.stale){$('#liveCards').innerHTML='<div class="result-card"><h4>실시간 도착정보 연결 안 됨</h4><p>저장된 과거 기록은 현재 버스 도착시간으로 표시하지 않습니다.</p><p>추천에서는 과거 혼잡도·배차 기록을 사용할 수 있습니다.</p></div>';return;}
+  elapsed+=Number(data.age_seconds)||0;
   $('#liveCards').innerHTML=data.buses.length?data.buses.map((b,i)=>`<div class="result-card"><h4>${i===0?'첫 번째 차량':'다음 차량'}</h4><p>${data.stale?'수집 당시 ':''}도착예상: ${b.arrival_seconds==null?'정보 없음':Math.max(0,Math.ceil((b.arrival_seconds-(data.stale?0:elapsed))/60))+'분'}</p><p>잔여좌석: ${b.remain_seats==null?'정보 없음':b.remain_seats+'석'}</p></div>`).join(''):'<p>현재 표시할 도착정보가 없습니다.</p>';
 }
 async function loadLive(){
