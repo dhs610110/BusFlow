@@ -137,8 +137,10 @@ class DataStore:
             rid=str(row.get('station_id',''))
             name=row.get('station_name') or names.get(rid,'')
             if name and canon(name)==canon(s['name']): ids.add(rid)
-        if len(ids)==1: s['realtime_id']=ids.pop(); return s
-        return None
+        if len(ids)==1: s['realtime_id']=ids.pop()
+        # A catalog destination is valid even without a verified live ID.
+        # Keep the ID missing so trip matching cannot use an invented/opposite stop.
+        return s
 
     def runs(self,route):
         if route in self._runs: return self._runs[route]
