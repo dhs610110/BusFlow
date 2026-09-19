@@ -119,7 +119,7 @@ async function runRecommendation(){
   const payload={date:plan.date,commute_mode:plan.mode,route_family:plan.routeFamily==='all'?null:plan.routeFamily,
     selected_boarding_stations:selected,destination:plan.destination,departure_time:plan.departureAny?null:plan.departureTime,
     arrival_time:plan.deadlineAny?null:plan.deadlineTime,departure_flexible:plan.departureAny,
-    risk_mode:plan.riskMode};
+    risk_mode:plan.riskMode==='safe'?'fast':'safe'};
   clearInterval(readyTimer);busy=true;showPage('result');$('#resultContent').innerHTML='<div class="result-hero"><h3>경로 탐색중...</h3></div>';
   try{const data=await api('/api/recommend-final',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});renderRecommendation(data);}
   catch(e){$('#resultContent').innerHTML=`<div class="result-hero"><h3>추천 정보를 불러오지 못했습니다.</h3><p>${esc(e.message)}</p><p>데모 결과로 대체하지 않습니다.</p><button class="tiny-btn" onclick="runRecommendation()">다시 시도</button></div>`;}
