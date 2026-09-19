@@ -668,20 +668,17 @@ a[onclick*="live"]{
 .gta-countdown-panel button{color:#ecf5ff;border:1px solid #688197;padding:10px 14px}
 @media(max-width:600px){.gta-timeline{padding:16px}.gta-timeline-point>b{font-size:21px}.gta-countdown-panel b{font-size:18px}.gta-countdown-panel{padding:16px}}
 
-/* Centered journey connectors and directional arrows */
+/* Centered journey connectors: repeated chevrons, no connecting stroke */
 .gta-timeline{grid-template-columns:minmax(0,1fr) minmax(80px,.65fr) minmax(0,1fr) minmax(80px,.65fr) minmax(0,1fr);column-gap:12px}
 .gta-timeline-point{text-align:center}
-.gta-timeline-line{height:48px;background:none;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px}
-.gta-timeline-line::before{display:block;top:calc(50% - 2px);left:0;right:0;height:4px;border-radius:4px;background:linear-gradient(90deg,#3d6478,#83e3d1)}
-.gta-timeline-line::after{content:"› ›";position:absolute;right:-3px;top:50%;transform:translateY(-54%);font-size:32px;font-weight:900;letter-spacing:-5px;background:linear-gradient(90deg,#426778 42%,#a1f5e2 58%);color:transparent;background-clip:text;-webkit-background-clip:text;line-height:1}
-.gta-timeline-line>span{position:relative;display:inline-block;margin:0 auto;padding:5px 8px;border-radius:7px;background:#182432;color:#d0e8f2;font-size:13px;font-weight:800;line-height:1.4;white-space:nowrap}
+.gta-timeline-line{height:56px;background:none;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px}
+.gta-timeline-line::before{content:"";display:block;position:absolute;top:calc(50% - 8px);left:0;right:0;height:16px;border-radius:0;background:linear-gradient(90deg,#416779,#86dfcd);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='16' viewBox='0 0 22 16'%3E%3Cpath d='M2 0h7l8 8-8 8H2l8-8z'/%3E%3C/svg%3E") center / 22px 16px repeat-x;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='16' viewBox='0 0 22 16'%3E%3Cpath d='M2 0h7l8 8-8 8H2l8-8z'/%3E%3C/svg%3E") center / 22px 16px repeat-x}
+.gta-timeline-line::after{content:none;display:none}
+.gta-timeline-line>span{position:relative;display:inline-block;margin:0 auto;padding:5px 8px;color:#d0e8f2;font-size:13px;font-weight:800;line-height:1.4;white-space:nowrap;transform:translateY(-24px);background:transparent}
 .live-eta-value{display:inline-block;color:#a6f1df;font-size:24px;font-variant-numeric:tabular-nums}
 @media(max-width:600px){
  .gta-timeline{grid-template-columns:1fr;gap:10px}
- .gta-timeline-line{width:100%;height:62px}
- .gta-timeline-line::before{top:0;bottom:0;left:calc(50% - 2px);right:auto;width:4px;height:auto;background:linear-gradient(#3d6478,#83e3d1)}
- .gta-timeline-line::after{right:auto;left:50%;top:auto;bottom:-8px;transform:translateX(-50%) rotate(90deg);font-size:28px}
- .gta-timeline-line>span{font-size:13px}
+ .gta-timeline-line{width:100%;height:70px}
+ .gta-timeline-line::before{top:0;bottom:0;left:calc(50% - 8px);right:auto;width:16px;height:auto;background:linear-gradient(#416779,#86dfcd);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'%3E%3Cpath d='M0 2v7l8 8 8-8V2l-8 8z'/%3E%3C/svg%3E") center / 16px 22px repeat-y;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='22' viewBox='0 0 16 22'%3E%3Cpath d='M0 2v7l8 8 8-8V2l-8 8z'/%3E%3C/svg%3E") center / 16px 22px repeat-y}
+ .gta-timeline-line>span{position:absolute;left:calc(50% + 16px);margin:0;padding:5px 0;transform:none}
 }
-
-@media(min-width:601px){.gta-timeline-line>span{transform:translateY(-20px);background:transparent}}
