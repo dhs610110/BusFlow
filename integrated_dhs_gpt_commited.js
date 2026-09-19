@@ -105,7 +105,7 @@ async function runRecommendation(){
     selected_boarding_stations:selected,destination:plan.destination,departure_time:plan.departureAny?null:plan.departureTime,
     arrival_time:plan.deadlineAny?null:plan.deadlineTime,departure_flexible:plan.departureAny,
     risk_mode:plan.riskMode==='safe'?'fast':'safe'};
-  busy=true;showPage('result');$('#resultContent').innerHTML='<div class="result-hero"><h3>기존 기록과 선택한 시간대의 예보를 비교하고 있습니다.</h3></div>';
+  busy=true;showPage('result');$('#resultContent').innerHTML='<div class="result-hero"><h3>경로 탐색중...</h3></div>';
   try{const data=await api('/api/recommend-final',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});renderRecommendation(data);}
   catch(e){$('#resultContent').innerHTML=`<div class="result-hero"><h3>추천 정보를 불러오지 못했습니다.</h3><p>${esc(e.message)}</p><p>데모 결과로 대체하지 않습니다.</p><button class="tiny-btn" onclick="runRecommendation()">다시 시도</button></div>`;}
   finally{busy=false;}
