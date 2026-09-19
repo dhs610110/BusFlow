@@ -435,6 +435,9 @@ def get_travel_context(
 
     try:
 
+        if not destination.get("realtime_id"):
+            raise LookupError("Destination has no verified live ID")
+
         travel = store.travel(
             route,
             station["realtime_id"],
@@ -1273,12 +1276,7 @@ def recommend(
         )
 
 
-        if (
-            not dest
-            or not dest.get(
-                "realtime_id"
-            )
-        ):
+        if not dest:
 
             missing.add(
                 f"{route} · "
@@ -1821,6 +1819,12 @@ def recommend(
                     "노선 기본값을 사용했습니다."
                 )
 
+
+            if not dest.get("realtime_id"):
+                reasons.append(
+                    "도착 정류장의 실시간 ID 연결이 없어 "
+                    "해당 구간 실측 대신 노선 기본 소요시간으로 추정했습니다."
+                )
 
             if travel.get(
                 "fallback"
