@@ -120,51 +120,42 @@ def load_env(
 # 공통 JSON 요청
 # ============================================================
 
-def request_json(
-    url,
-    params,
-):
+class ExternalAPIError(RuntimeError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__("외부 API 조회 실패")
 
-    if (
-        os.getenv(
-            "BUSFLOW_OFFLINE"
-        )
-        == "1"
-    ):
 
-        raise RuntimeError(
-            "외부 API 검증 보류: "
-            "오프라인 모드"
-        )
-
+def request_json(url, params):
+    from urllib.error import HTTPError, URLError
+    import socket
+    import xml.etree.ElementTree as ET
+    if os.getenv("BUSFLOW_OFFLINE") == "1":
+        raise ExternalAPIError("OFFLINE")
     try:
-
-        full_url = (
-            url
-            + "?"
-            + urlencode(
-                params
-            )
-        )
-
-        with urlopen(
-            full_url,
-            timeout=12,
-        ) as response:
-
-            return json.load(
-                response
-            )
-
+        with urlopen(url + "?" + urlencode(params), timeout=12) as response:
+            raw = response.read()
+        try:
+            return json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            try:
+                root = ET.fromstring(raw)
+                code = root.findtext(".//returnReasonCode") or root.findtext(".//resultCode")
+                if code and code.isdigit() and len(code) <= 3:
+                    raise ExternalAPIError("GATEWAY_" + code)
+            except ET.ParseError:
+                pass
+            raise ExternalAPIError("NON_JSON_RESPONSE")
+    except ExternalAPIError:
+        raise
+    except HTTPError as exc:
+        raise ExternalAPIError("HTTP_" + str(exc.code)) from None
+    except (TimeoutError, socket.timeout):
+        raise ExternalAPIError("TIMEOUT") from None
+    except URLError:
+        raise ExternalAPIError("NETWORK_ERROR") from None
     except Exception:
-
-        # API 키 또는 요청 URL이
-        # 에러에 노출되지 않도록
-        # 원본 exception은 숨김
-        raise RuntimeError(
-            "외부 서비스 연결 실패. "
-            "잠시 후 다시 조회해주세요."
-        ) from None
+        raise ExternalAPIError("REQUEST_ERROR") from None
 
 
 # ============================================================
@@ -875,9 +866,7 @@ class External:
                     )
                 ):
 
-                    raise RuntimeError(
-                        "버스 API 응답 오류"
-                    )
+                    raise ExternalAPIError("BUS_" + result_code if result_code.isdigit() and len(result_code) <= 3 else "BUS_RESPONSE_ERROR")
 
 
                 arrivals = (
@@ -1143,8 +1132,10 @@ class External:
             KeyError,
             ValueError,
             TypeError,
-        ):
+        ) as exc:
 
+            error_code = getattr(exc, "code", "RESPONSE_OR_CONFIG_ERROR")
+            print("bus_api_failure", error_code, flush=True)
             rows = []
 
 
@@ -1256,6 +1247,7 @@ class External:
 
                     "stale":
                         True,
+                    "error_code": error_code,
 
                     "source":
                         (
@@ -1290,6 +1282,7 @@ class External:
 
                 "stale":
                     True,
+                "error_code": error_code,
 
                 "source":
                     (
