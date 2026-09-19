@@ -387,15 +387,21 @@ function updateLiveStations(){
   $('#liveCards').innerHTML='';$('#liveStatus').textContent='정류장을 선택한 뒤 조회해주세요.';updateLiveSelectionPreview();
 }
 function updateLiveSelectionPreview(){$('#liveSelectionPreview').textContent=$('#liveRoute').value+$('#liveDirection').value+' · '+($('#liveStation').selectedOptions[0]?.textContent||'정류장 선택');}
+function formatLiveEta(seconds){
+  if(!Number.isFinite(Number(seconds)))return '정보 없음';
+  const remaining=Math.max(0,Math.ceil(Number(seconds)));
+  if(!remaining)return '도착 예정 · 새로고침으로 확인';
+  return Math.floor(remaining/60)+'분 '+String(remaining%60).padStart(2,'0')+'초';
+}
 function renderLive(data,elapsed=0){
   if(data.stale){$('#liveCards').innerHTML='<div class="result-card"><h4>실시간 도착정보 연결 안 됨</h4><p>저장된 과거 기록은 현재 버스 도착시간으로 표시하지 않습니다.</p><p>추천에서는 과거 혼잡도·배차 기록을 사용할 수 있습니다.</p></div>';return;}
   elapsed+=Number(data.age_seconds)||0;
-  $('#liveCards').innerHTML=data.buses.length?data.buses.map((b,i)=>`<div class="result-card"><h4>${i===0?'첫 번째 차량':'다음 차량'}</h4><p>${data.stale?'수집 당시 ':''}도착예상: ${b.arrival_seconds==null?'정보 없음':Math.max(0,Math.ceil((b.arrival_seconds-(data.stale?0:elapsed))/60))+'분'}</p><p>잔여좌석: ${b.remain_seats==null?'정보 없음':b.remain_seats+'석'}</p></div>`).join(''):'<p>현재 표시할 도착정보가 없습니다.</p>';
+  $('#liveCards').innerHTML=data.buses.length?data.buses.map((b,i)=>`<div class="result-card"><h4>${i===0?'첫 번째 차량':'다음 차량'}</h4><p>${data.stale?'수집 당시 ':''}도착예상: <strong class="live-eta-value">${b.arrival_seconds==null?'정보 없음':formatLiveEta(b.arrival_seconds-elapsed)}</strong></p><p>잔여좌석: ${b.remain_seats==null?'정보 없음':b.remain_seats+'석'}</p></div>`).join(''):'<p>현재 표시할 도착정보가 없습니다.</p>';
 }
 async function loadLive(){
   clearInterval(liveTimer);const route=$('#liveRoute').value+$('#liveDirection').value,station=$('#liveStation').value;
   $('#liveStatus').textContent='조회 중…';
-  try{const d=await api('/api/realtime-final/'+route+'?station_id='+encodeURIComponent(station));$('#liveStatus').textContent=`${d.source} · ${d.collected_at||'기준시각 없음'}${d.headway_minutes!=null?' · 두 차량 간격 '+d.headway_minutes.toFixed(1)+'분':''}`;renderLive(d);const start=Date.now();if(!d.stale)liveTimer=setInterval(()=>renderLive(d,(Date.now()-start)/1000),1000);}
+  try{const d=await api('/api/realtime-final/'+route+'?station_id='+encodeURIComponent(station));$('#liveStatus').textContent=`${d.source} · ${d.collected_at||'기준시각 없음'}${d.headway_minutes!=null?' · 두 차량 간격 '+d.headway_minutes.toFixed(1)+'분':''} · 남은 시간은 조회값 기준으로 감소합니다.`;renderLive(d);const start=Date.now();if(!d.stale)liveTimer=setInterval(()=>renderLive(d,(Date.now()-start)/1000),1000);}
   catch(e){$('#liveStatus').textContent='조회 실패 · '+e.message;$('#liveCards').innerHTML='';}
 }
 async function init(){
